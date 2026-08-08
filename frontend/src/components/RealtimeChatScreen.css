@@ -1,0 +1,380 @@
+/* RealtimeChatScreen (v11 M2, 2026-08-08) — the post-design-review spike
+   look (spike/qwen-realtime/static/index.html) on app tokens: paper bg,
+   #2F6F5E accent (= --color-voice), hairlines, flattened grammar card,
+   filled mic. All classes are rt- scoped so global.css is untouched. */
+
+.rt-screen {
+  height: 100%;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  overflow-x: clip;
+}
+
+/* ------------------------------------------------ header */
+.rt-screen .topbar {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.rt-mini {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.rt-mini-active {
+  background: var(--color-voice);
+  border-color: var(--color-voice);
+  color: #fff;
+}
+.rt-mini:focus-visible,
+.rt-chip:focus-visible,
+.rt-replay:focus-visible,
+.rt-send:focus-visible,
+.rt-type-input:focus-visible,
+.rt-mic:focus-visible {
+  outline: 2px solid var(--color-voice);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------ banner */
+.rt-banner {
+  margin: 10px clamp(12px, 3vw, 24px) 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-pen);
+  border-radius: var(--radius-control);
+  background: var(--color-pen-light);
+  color: var(--color-pen);
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+/* ------------------------------------------------ chat */
+.rt-chat {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: clip; /* mobile horizontal overflow guard (design review) */
+  display: flex;
+  flex-direction: column;
+  padding: 14px clamp(12px, 3vw, 24px);
+  scrollbar-width: thin;
+}
+
+.rt-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--color-ink-muted);
+  font-size: 14px;
+  max-width: 340px;
+  padding: 40px 0;
+}
+.rt-empty-big {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--color-ink);
+  margin-bottom: 6px;
+}
+.rt-starters {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rt-starter-lbl {
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.rt-chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 13px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-voice-dark);
+  cursor: pointer;
+}
+.rt-chip:hover {
+  border-color: var(--color-voice);
+}
+
+.rt-msg {
+  max-width: 84%;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.rt-msg-tutor {
+  align-self: flex-start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  /* inset accent respects the rounded corner (was border-left, left a notch) */
+  box-shadow: inset 3px 0 0 var(--color-voice);
+}
+.rt-msg-user {
+  align-self: flex-end;
+  background: var(--color-voice-light);
+}
+.rt-unclear {
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+.rt-who {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  margin-bottom: 2px;
+}
+.rt-replay {
+  display: inline-block;
+  margin-top: 8px;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-voice);
+  cursor: pointer;
+}
+.rt-replay:hover {
+  border-color: var(--color-voice);
+}
+
+/* Romanization sub-line under user + tutor bubble text */
+.rt-roman {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+/* Grammar card, appended inside the user bubble for that turn.
+   2026-08-07 review: flattened — full-bleed strip with a top hairline
+   (was a bordered box inside a bordered bubble: box-in-box, ate width). */
+.rt-gcard {
+  margin: 8px -14px -10px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px);
+  background: var(--color-surface);
+  box-shadow: inset 3px 0 0 var(--color-voice);
+  font-size: 13px;
+}
+.rt-gcard-ok {
+  color: var(--color-voice);
+}
+.rt-gexpl {
+  margin-top: 2px;
+  color: var(--color-ink-muted);
+}
+
+/* 3-bar equalizer inside the tutor bubble while audio plays */
+.rt-eq {
+  display: inline-flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 14px;
+  margin-top: 8px;
+}
+.rt-eq i {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-voice);
+  opacity: 0.75;
+  animation: rt-eq 0.9s ease-in-out infinite;
+}
+.rt-eq i:nth-child(2) { animation-delay: 0.15s; }
+.rt-eq i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes rt-eq {
+  0%, 100% { height: 4px; }
+  50% { height: 14px; }
+}
+
+/* Quota/trial card (close 4001) */
+.rt-quota {
+  align-self: center;
+  margin: 16px 0;
+  padding: 16px 20px;
+  max-width: 340px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  font-size: 14px;
+}
+.rt-quota-cta {
+  margin-top: 10px;
+  background: var(--color-voice);
+  border-color: var(--color-voice);
+  color: #fff;
+}
+
+/* ------------------------------------------------ dock (type row → meter → status → mic) */
+.rt-dock {
+  border-top: 1px solid var(--color-border);
+  padding: 12px clamp(12px, 3vw, 24px) max(12px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.rt-type-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.rt-type-input {
+  flex: 1;
+  min-width: 0; /* kills mobile overflow: lets the flex item shrink below intrinsic width */
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.rt-send {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 16px;
+  border: 1px solid var(--color-voice);
+  border-radius: var(--radius-pill);
+  background: var(--color-voice);
+  color: #fff;
+  cursor: pointer;
+}
+.rt-send:hover {
+  filter: brightness(1.08);
+}
+
+.rt-meter {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 20px;
+}
+.rt-meter span {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--color-border-strong);
+  transition: background 0.1s;
+}
+.rt-meter span:nth-child(1) { height: 6px; }
+.rt-meter span:nth-child(2) { height: 10px; }
+.rt-meter span:nth-child(3) { height: 14px; }
+.rt-meter span:nth-child(4) { height: 17px; }
+.rt-meter span:nth-child(5) { height: 20px; }
+.rt-meter span.rt-on {
+  background: var(--color-voice);
+}
+
+.rt-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rt-status {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  min-height: 20px;
+}
+
+/* The mic is the primary action — always filled (2026-08-07 review). */
+.rt-mic {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  background: var(--color-voice);
+  border: 2px solid var(--color-voice);
+  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.rt-mic-idle:hover {
+  transform: scale(1.04);
+}
+.rt-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--color-voice);
+  opacity: 0;
+  pointer-events: none;
+}
+.rt-mic-live .rt-ring {
+  animation: rt-pulse 1.8s ease-out infinite;
+}
+.rt-mic-recording {
+  background: var(--color-voice-dark);
+  border-color: var(--color-voice-dark);
+}
+.rt-mic-recording .rt-ring {
+  animation: rt-pulse 1.2s ease-out infinite;
+}
+@keyframes rt-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  70% { transform: scale(1.35); opacity: 0; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* ------------------------------------------------ debug drawer */
+.rt-debug {
+  border-top: 1px solid var(--color-border);
+  padding: 6px clamp(12px, 3vw, 24px) 10px;
+}
+.rt-debug summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  list-style: none;
+  padding: 4px 0;
+}
+.rt-debug summary::before { content: "+ "; }
+.rt-debug[open] summary::before { content: "– "; }
+.rt-debug h2 {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  margin: 10px 0 4px;
+}
+.rt-debug div {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .rt-msg { max-width: 92%; }
+  .rt-mini { padding-top: 7px; padding-bottom: 7px; } /* taller touch targets */
+  .rt-replay { padding: 6px 14px; }
+  .rt-debug summary { padding: 10px 0; }
+}

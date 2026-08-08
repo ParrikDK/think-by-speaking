@@ -1,0 +1,16 @@
+.volume-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  padding: 0 2px;
+}
+
+.volume-meter-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--meter-color, var(--color-voice));
+  transition: height 0.06s ease-out, opacity 0.06s ease-out;
+  min-height: 3px;
+  will-change: height, opacity;
+}

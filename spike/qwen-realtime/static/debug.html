@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Qwen Realtime Spike — language tutor voice path</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+         margin: 0; padding: 16px; max-width: 960px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #888; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  button, select { font: inherit; padding: 6px 12px; border: 1px solid #999; border-radius: 6px;
+                   background: transparent; color: inherit; cursor: pointer; }
+  button.lang.active { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  #interruptBtn { padding: 14px 28px; font-size: 16px; font-weight: 600;
+                  border: 2px solid #c0392b; color: #c0392b; border-radius: 10px; }
+  #status { padding: 6px 10px; border-radius: 6px; background: #6662; font-family: ui-monospace, monospace; }
+  #banner { display: none; padding: 10px 12px; border-radius: 6px; margin: 8px 0;
+            background: #c0392b22; border: 1px solid #c0392b; color: #e74c3c; white-space: pre-wrap; }
+  .panel { border: 1px solid #8885; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #888; margin: 0 0 8px; }
+  #transcript { min-height: 120px; }
+  .line { margin: 3px 0; }
+  .line .who { font-weight: 600; margin-right: 6px; }
+  .line.user .who { color: #2f6fed; }
+  .line.tutor .who { color: #0a8a4a; }
+  .line.pending { opacity: .55; }
+  #latency div { font-family: ui-monospace, monospace; }
+  #rawlog { max-height: 260px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px;
+            white-space: pre-wrap; word-break: break-all; }
+  #rawlog div { border-bottom: 1px dotted #8883; padding: 1px 0; }
+</style>
+</head>
+<body>
+<h1>Qwen3.5-Omni realtime spike</h1>
+<div class="sub">browser &harr; local proxy &harr; DashScope · mic 16 kHz PCM16 up / 24 kHz PCM16 down</div>
+
+<div class="row">
+  <span>Language:</span>
+  <button class="lang active" data-lang="yue">廣東話</button>
+  <button class="lang" data-lang="zh">普通话</button>
+  <button class="lang" data-lang="en">English</button>
+  <select id="modelSel">
+    <option value="qwen3.5-omni-flash-realtime" selected>flash realtime (cheap)</option>
+    <option value="qwen3.5-omni-plus-realtime">plus realtime (best)</option>
+  </select>
+  <button id="connectBtn">Connect</button>
+  <button id="disconnectBtn" disabled>Disconnect</button>
+</div>
+
+<div class="row"><span id="status">disconnected</span></div>
+<div id="banner"></div>
+
+<div class="row">
+  <button id="interruptBtn" disabled>✋ Interrupt (flush audio)</button>
+  <span class="sub">barge-in also auto-fires when the server reports your speech started</span>
+</div>
+
+<div class="panel"><h2>Transcript</h2><div id="transcript"></div></div>
+<div class="panel"><h2>Latency per turn (speech end &rarr; first audio)</h2><div id="latency"></div></div>
+<details class="panel"><summary><h2 style="display:inline">Raw upstream events</h2></summary><div id="rawlog"></div></details>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- state
+let ws = null;
+let micCtx = null, micStream = null, micNode = null;
+let playCtx = null;
+let playQueue = [];        // AudioBufferSourceNodes scheduled/playing
+let nextPlayTime = 0;      // gapless scheduling cursor (playCtx time)
+let currentLang = "yue";
+let turnRef = null;        // {t: performance.now(), label} waiting for first audio
+let pendingUserEl = null, pendingTutorEl = null;
+
+const $ = id => document.getElementById(id);
+const statusEl = $("status"), bannerEl = $("banner");
+
+function setStatus(s) { statusEl.textContent = s; }
+function showBanner(msg) { bannerEl.style.display = "block"; bannerEl.textContent = msg; }
+function clearBanner() { bannerEl.style.display = "none"; bannerEl.textContent = ""; }
+
+// ---------------------------------------------------------------- logging
+function addLine(who, cssClass) {
+  const el = document.createElement("div");
+  el.className = "line " + cssClass;
+  const label = document.createElement("span");
+  label.className = "who"; label.textContent = who;
+  const text = document.createElement("span");
+  el.append(label, text);
+  $("transcript").appendChild(el);
+  el.scrollIntoView({ block: "nearest" });
+  return { el, text };
+}
+function rawLog(obj) {
+  const box = $("rawlog");
+  const div = document.createElement("div");
+  const { type, ...rest } = obj;
+  div.textContent = new Date().toISOString().slice(11, 23) + " " + type + " " +
+    JSON.stringify(rest).slice(0, 500);
+  box.appendChild(div);
+  while (box.childElementCount > 400) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---------------------------------------------------------------- mic capture
+// AudioWorklet source (inline via Blob URL): forwards Float32 blocks, batched ~4k samples.
+const WORKLET_SRC = `
+class PCMWorklet extends AudioWorkletProcessor {
+  constructor() { super(); this.chunks = []; this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch && ch.length) {
+      this.chunks.push(ch.slice(0)); this.n += ch.length;
+      if (this.n >= 4096) {
+        const out = new Float32Array(this.n);
+        let o = 0;
+        for (const c of this.chunks) { out.set(c, o); o += c.length; }
+        this.port.postMessage(out, [out.buffer]);
+        this.chunks = []; this.n = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-worklet', PCMWorklet);
+`;
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+  });
+  micCtx = new AudioContext();              // device rate, e.g. 48 kHz
+  const srcRate = micCtx.sampleRate;
+  await micCtx.audioWorklet.addModule(
+    URL.createObjectURL(new Blob([WORKLET_SRC], { type: "application/javascript" })));
+  const src = micCtx.createMediaStreamSource(micStream);
+  micNode = new AudioWorkletNode(micCtx, "pcm-worklet");
+  micNode.port.onmessage = (e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const pcm = downsampleToPCM16(e.data, srcRate, 16000);
+    if (pcm.length) ws.send(pcm.buffer);    // binary frame = raw PCM16 LE @16 kHz
+  };
+  src.connect(micNode);
+  micNode.connect(micCtx.destination);      // required so process() keeps running
+}
+
+// Linear-interp decimation to 16 kHz + Float32 -> PCM16 LE. Good enough for a test rig.
+function downsampleToPCM16(input, srcRate, dstRate) {
+  const ratio = srcRate / dstRate;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
+    const next = input[Math.min(i0 + 1, input.length - 1)];
+    const s = input[i0] + (next - input[i0]) * frac;
+    const c = Math.max(-1, Math.min(1, s));
+    out[i] = c < 0 ? c * 0x8000 : c * 0x7FFF;
+  }
+  return out;
+}
+
+function stopMic() {
+  if (micNode) { micNode.disconnect(); micNode = null; }
+  if (micCtx) { micCtx.close(); micCtx = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
+
+// ---------------------------------------------------------------- playback (24 kHz)
+function ensurePlayCtx() {
+  if (playCtx) return;
+  try { playCtx = new AudioContext({ sampleRate: 24000 }); }
+  catch (e) { playCtx = new AudioContext(); }  // buffer at 24k still resamples on playback
+}
+
+function playPCM(arrayBuffer) {
+  ensurePlayCtx();
+  const int16 = new Int16Array(arrayBuffer);
+  const f32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768;
+  const buf = playCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const node = playCtx.createBufferSource();
+  node.buffer = buf;
+  node.connect(playCtx.destination);
+  const t = Math.max(playCtx.currentTime + 0.03, nextPlayTime);  // gapless queue
+  node.start(t);
+  nextPlayTime = t + buf.duration;
+  playQueue.push(node);
+  node.onended = () => { playQueue = playQueue.filter(n => n !== node); };
+  markFirstAudio();
+}
+
+function flushPlayback(reason) {
+  for (const n of playQueue) { try { n.stop(); } catch (e) { /* already stopped */ } }
+  playQueue = [];
+  nextPlayTime = 0;
+  if (reason) rawLog({ type: "client.playback_flushed", reason });
+}
+
+// ---------------------------------------------------------------- latency
+function markFirstAudio() {
+  if (!turnRef) return;
+  const ms = Math.round(performance.now() - turnRef.t);
+  const div = document.createElement("div");
+  div.textContent = `turn @${new Date().toLocaleTimeString()} — ${ms} ms (from ${turnRef.label})`;
+  $("latency").prepend(div);
+  turnRef = null;
+}
+
+// ---------------------------------------------------------------- upstream events
+function handleEvent(ev) {
+  rawLog(ev);
+  switch (ev.type) {
+    case "session.created":
+    case "session.updated":
+      setStatus(`connected — ${currentLang}, ${$("modelSel").value} (${ev.type})`);
+      break;
+
+    case "input_audio_buffer.speech_started":
+      flushPlayback("speech_started (barge-in)");   // cut tutor audio immediately
+      turnRef = null;
+      break;
+
+    case "input_audio_buffer.speech_stopped":
+      turnRef = { t: performance.now(), label: "speech_stopped" };
+      break;
+
+    case "response.created":
+      if (!turnRef) turnRef = { t: performance.now(), label: "response.created" };
+      pendingTutorEl = null;
+      break;
+
+    case "response.done":
+      pendingTutorEl = null;
+      break;
+
+    // user STT preview: confirmed prefix (text) + tentative suffix (stash)
+    case "conversation.item.input_audio_transcription.delta": {
+      const preview = (ev.text || "") + (ev.stash || "");
+      if (!pendingUserEl) { pendingUserEl = addLine("you", "user pending"); }
+      pendingUserEl.text.textContent = preview;
+      break;
+    }
+    case "conversation.item.input_audio_transcription.completed":
+      if (!pendingUserEl) pendingUserEl = addLine("you", "user");
+      pendingUserEl.text.textContent = ev.transcript || "";
+      pendingUserEl.el.classList.remove("pending");
+      pendingUserEl = null;
+      break;
+
+    case "response.audio_transcript.delta":
+      if (!pendingTutorEl) pendingTutorEl = addLine("tutor", "tutor pending");
+      pendingTutorEl.text.textContent += ev.delta || "";
+      break;
+    case "response.audio_transcript.done":
+      if (pendingTutorEl) {
+        if (ev.transcript) pendingTutorEl.text.textContent = ev.transcript;
+        pendingTutorEl.el.classList.remove("pending");
+        pendingTutorEl = null;
+      }
+      break;
+
+    case "error":
+      showBanner("upstream error: " + ((ev.error && ev.error.message) || JSON.stringify(ev)));
+      break;
+  }
+}
+
+// ---------------------------------------------------------------- connect / disconnect
+async function connect() {
+  clearBanner();
+  const model = $("modelSel").value;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const url = `${proto}://${location.host}/ws?lang=${encodeURIComponent(currentLang)}&model=${encodeURIComponent(model)}`;
+  setStatus("connecting… " + url);
+  ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = async () => {
+    setStatus("ws open — starting mic…");
+    $("connectBtn").disabled = true;
+    $("disconnectBtn").disabled = false;
+    $("interruptBtn").disabled = false;
+    try { await startMic(); }
+    catch (e) { showBanner("mic failed: " + e.message + " (needs localhost or https)"); }
+  };
+  ws.onmessage = (m) => {
+    if (typeof m.data === "string") {
+      try { handleEvent(JSON.parse(m.data)); } catch (e) { rawLog({ type: "client.bad_json" }); }
+    } else {
+      playPCM(m.data);                       // binary = tutor PCM16 @24 kHz
+    }
+  };
+  ws.onclose = () => {
+    setStatus("disconnected");
+    $("connectBtn").disabled = false;
+    $("disconnectBtn").disabled = true;
+    $("interruptBtn").disabled = true;
+    stopMic();
+    flushPlayback();
+    ws = null;
+  };
+  ws.onerror = () => setStatus("ws error (see banner/log)");
+}
+
+function disconnect() { if (ws) ws.close(); }
+
+// ---------------------------------------------------------------- UI wiring
+document.querySelectorAll("button.lang").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("button.lang").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    currentLang = b.dataset.lang;
+  });
+});
+$("connectBtn").addEventListener("click", connect);
+$("disconnectBtn").addEventListener("click", disconnect);
+$("interruptBtn").addEventListener("click", () => {
+  flushPlayback("manual interrupt button");
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "response.cancel" }));
+});
+</script>
+</body>
+</html>

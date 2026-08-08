@@ -1,0 +1,61 @@
+:root {
+  /* surfaces */
+  --color-paper: #EDEFE8;
+  --color-surface: #FFFFFF;
+  --color-surface-sunken: #F5F6F0;
+  --color-border: #D8DBCF;
+  --color-border-strong: #C3C7B9;
+
+  /* text */
+  --color-ink: #1B2430;
+  --color-ink-muted: #5B6472;
+  --color-ink-faint: #8A928F;
+
+  /* the one interactive accent: mic, waveform, links, active states */
+  --color-voice: #2F6F5E;
+  --color-voice-dark: #1E4E40;
+  --color-voice-light: #E1EDE8;
+  --color-voice-faint: rgba(47, 111, 94, 0.08);
+
+  /* corrections only - never used decoratively */
+  --color-pen: #C1442D;
+  --color-pen-light: #FBEAE5;
+
+  /* gold accent (welcome feature card tint only) */
+  --color-highlight-bg: #F6EBD9;
+
+  /* type */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Noto Sans',
+    'Noto Sans CJK SC', 'Noto Sans CJK TC', 'Noto Sans CJK JP', 'Noto Sans CJK KR',
+    'Noto Sans Thai', 'Noto Sans Devanagari', 'Noto Sans Bengali', 'Noto Sans Arabic',
+    'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radius: one system - cards 14, controls 10, interactive pills full */
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --radius-control: 10px;
+
+  /* spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* elevation: tinted to ink-green, never pure black */
+  --shadow-card: 0 1px 2px rgba(27, 46, 40, 0.05), 0 6px 20px rgba(27, 46, 40, 0.07);
+  --shadow-lift: 0 2px 4px rgba(27, 46, 40, 0.06), 0 14px 34px rgba(27, 46, 40, 0.12);
+  --shadow-pop: 0 16px 48px rgba(27, 46, 40, 0.20);
+
+  /* ambient page wash */
+  --wash-voice: radial-gradient(1200px 700px at 85% -10%, rgba(47, 111, 94, 0.10), transparent 60%);
+  --wash-gold: radial-gradient(900px 600px at -10% 100%, rgba(201, 138, 59, 0.08), transparent 55%);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 0.15s;
+  --dur-med: 0.28s;
+}

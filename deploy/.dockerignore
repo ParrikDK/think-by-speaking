@@ -1,0 +1,13 @@
+# Never bake secrets, data, or venvs into the image (audit C2, 2026-08-05)
+backend/.env
+backend/.env.*
+backend/*.db*
+backend/logs/
+backend/venv/
+backend/.venv/
+backend/.pytest_cache/
+backend/tests/
+deploy/.ruff_cache/
+**/.DS_Store
+**/__pycache__/
+buffer/

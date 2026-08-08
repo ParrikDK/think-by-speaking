@@ -1,0 +1,15 @@
+[Unit]
+Description=Speak, Don't Just Read
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/tutor/backend
+EnvironmentFile=/opt/tutor/backend/.env
+ExecStart=/opt/tutor/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voice tutor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<style>
+  :root {
+    --paper: #faf8f5;
+    --ink: #1a1d21;
+    --accent: #2f6f5e;
+    --hairline: #e6dfd4;
+    --muted: #6f675c;            /* 2026-08-07 design review: was #8a8177, below contrast on paper */
+    --user-tint: #e7efeb;        /* was #eef4f1 — stronger tint to differentiate user bubbles */
+    --chip-line: #d8d2c8;
+    --banner-bg: #f9ece7;
+    --banner-border: #d9b3a6;
+    --banner-ink: #8a3b28;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; overflow-x: clip; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app {
+    max-width: 720px;
+    margin: 0 auto;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
+  }
+
+  /* ------------------------------------------------ header */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 14px 0 12px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 6px; }
+  /* Group divider between chip groups (2026-08-07 review: labels removed) */
+  .model-toggle { display: flex; gap: 4px; align-items: center;
+    border-left: 1px solid var(--hairline); padding-left: 10px; }
+  .chip, .mini {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 13px;
+    border: 1px solid var(--chip-line);
+    border-radius: 999px;
+    background: transparent;
+    color: #46524c;
+    cursor: pointer;
+  }
+  .chip.active, .mini.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip:focus-visible, .mini:focus-visible, #micBtn:focus-visible, .replay:focus-visible,
+  #sendBtn:focus-visible, #typeInput:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .mini { font-size: 12px; padding: 5px 10px; color: #5f6b67; }
+  .mini.active { color: #fff; }
+
+  /* ------------------------------------------------ banner */
+  #banner {
+    margin: 10px 0 0;
+    padding: 10px 14px;
+    border: 1px solid var(--banner-border);
+    border-radius: 10px;
+    background: var(--banner-bg);
+    color: var(--banner-ink);
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  #banner[hidden] { display: none; }
+
+  /* ------------------------------------------------ chat */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: clip;      /* 2026-08-07 review: mobile horizontal overflow guard */
+    display: flex;
+    flex-direction: column;
+    padding: 14px 2px 14px 0;
+    scrollbar-width: thin;
+  }
+  #emptyState {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 340px;
+    padding: 40px 0;
+  }
+  #emptyState .big {
+    font-family: ui-serif, "New York", Georgia, "Times New Roman", "PingFang SC", "Songti SC", serif;
+    font-size: 18px;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .msg {
+    max-width: 84%;
+    margin: 8px 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .msg.tutor {
+    align-self: flex-start;
+    background: #fff;
+    border: 1px solid var(--hairline);
+    /* inset accent respects the rounded corner (was border-left, left a notch) */
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .msg.user { align-self: flex-end; background: var(--user-tint); }
+  .msg .unclear { color: var(--muted); font-style: italic; }
+  .msg .who {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .replay {
+    display: inline-block;
+    margin-top: 8px;
+    font: inherit;
+    font-size: 12px;
+    padding: 3px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .replay:hover { border-color: var(--accent); }
+
+  /* Romanization sub-line under user + tutor bubble text */
+  .roman { margin-top: 3px; font-size: 13px; color: var(--muted); }
+
+  /* Grammar card, appended inside the user bubble for that turn.
+     2026-08-07 review: flattened — full-bleed strip with a top hairline
+     (was a bordered box inside a bordered bubble: box-in-box, ate width). */
+  .gcard {
+    margin: 8px -14px -10px;
+    padding: 8px 14px 10px;
+    border: none;
+    border-top: 1px solid var(--hairline);
+    border-radius: 0 0 11px 11px;
+    background: #fff;
+    box-shadow: inset 3px 0 0 var(--accent);
+    font-size: 13px;
+  }
+  .gcard.ok { color: var(--accent); }
+  .gcard .gexpl { margin-top: 2px; color: var(--muted); }
+
+  /* 3-bar equalizer inside the tutor bubble while audio plays */
+  .eq { display: inline-flex; gap: 3px; align-items: flex-end; height: 14px; margin-top: 8px; }
+  .eq[hidden] { display: none; }
+  .eq i {
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.75;
+    animation: eq 0.9s ease-in-out infinite;
+  }
+  .eq i:nth-child(2) { animation-delay: 0.15s; }
+  .eq i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes eq { 0%, 100% { height: 4px; } 50% { height: 14px; } }
+
+  /* ------------------------------------------------ dock */
+  #dock {
+    border-top: 1px solid var(--hairline);
+    padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  #micBtn {
+    position: relative;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    /* Phone hold-to-talk (2026-08-08): stop iOS's long-press magnifier/callout
+       and keep the hold from being hijacked as a scroll gesture (which would
+       fire pointercancel and abort the recording). */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+  }
+  /* Same treatment for every tap/hold control; bubble text stays selectable. */
+  .chip, .mini, .replay, #sendBtn, #endBtn, .starter {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* 2026-08-07 review: the mic is the primary action — always filled.
+     Also: the `hidden` attribute does NOT apply to SVG elements, so the stop
+     icon was always rendered on top of the mic glyph. Force it via CSS. */
+  #micBtn svg[hidden] { display: none; }
+  #micBtn.idle { background: var(--accent); border: 2px solid var(--accent); color: #fff; }
+  #micBtn.idle:hover { transform: scale(1.04); }
+  #micBtn.live, #micBtn.speaking { background: var(--accent); border: 2px solid var(--accent); color: #fff; }
+  #micBtn .ring {
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #micBtn.live .ring { animation: pulse 1.8s ease-out infinite; }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.55; }
+    70% { transform: scale(1.35); opacity: 0; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+  #meter { display: flex; gap: 4px; align-items: flex-end; height: 20px; }
+  #meter span { width: 4px; border-radius: 2px; background: var(--chip-line); transition: background 0.1s; }
+  #meter span:nth-child(1) { height: 6px; }
+  #meter span:nth-child(2) { height: 10px; }
+  #meter span:nth-child(3) { height: 14px; }
+  #meter span:nth-child(4) { height: 17px; }
+  #meter span:nth-child(5) { height: 20px; }
+  #meter span.on { background: var(--accent); }
+  #statusRow { display: flex; align-items: center; gap: 10px; }
+  #status { font-size: 13px; color: var(--muted); min-height: 20px; }
+  /* Push-to-talk hold state (2026-08-07) */
+  #micBtn.recording { background: #24584a; border-color: #24584a; }
+  #micBtn.recording .ring { animation: pulse 1.2s ease-out infinite; }
+
+  /* Typed input row (below the mic — voice is primary, 2026-08-07 review).
+     min-width:0 on the input is what actually kills the mobile overflow:
+     without it the flex item can't shrink below its intrinsic width and the
+     whole row (then the page) goes wider than a 390px viewport. */
+  #typeRow { display: flex; gap: 8px; width: 100%; }
+  #typeInput {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 14px;
+    border: 1px solid var(--chip-line);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  #sendBtn {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 16px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  #sendBtn:hover { filter: brightness(1.08); }
+
+  /* ------------------------------------------------ debug drawer */
+  #debugDrawer { border-top: 1px solid var(--hairline); padding: 6px 0 10px; }
+  #debugDrawer summary {
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    list-style: none;
+    padding: 4px 0;
+  }
+  #debugDrawer summary::before { content: "+ "; }
+  #debugDrawer[open] summary::before { content: "– "; }
+  #debugDrawer h2 {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 10px 0 4px;
+  }
+  #latency div { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  #rawlog {
+    max-height: 220px;
+    overflow: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #4a453f;
+  }
+  #rawlog div { border-bottom: 1px dotted var(--hairline); padding: 1px 0; }
+
+  /* Empty-state starter chips (2026-08-07 review: zero-typing onramp) */
+  #starterChips { margin-top: 16px; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .starter-lbl { font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 560px) {
+    #app { padding: 0 14px; }
+    .msg { max-width: 92%; }
+    .chip, .mini { padding-top: 7px; padding-bottom: 7px; }   /* taller touch targets */
+    .replay { padding: 6px 14px; }
+    #debugDrawer summary { padding: 10px 0; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="header-controls">
+      <div class="chips" role="group" aria-label="Language">
+        <button type="button" class="chip active" data-lang="yue" lang="zh-Hant">廣東話</button>
+        <button type="button" class="chip" data-lang="zh" lang="zh-Hans">普通话</button>
+        <button type="button" class="chip" data-lang="en">English</button>
+      </div>
+      <div class="model-toggle" role="group" aria-label="Level">
+        <button type="button" class="mini level-chip active" data-level="beginner">beginner</button>
+        <button type="button" class="mini level-chip" data-level="intermediate">intermediate</button>
+        <button type="button" class="mini level-chip" data-level="fluent">fluent</button>
+      </div>
+      <button type="button" id="hfToggle" class="mini" aria-pressed="false"
+              title="Hands-free mode: the tutor listens continuously">hands-free</button>
+    </div>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <main id="chat" aria-live="polite">
+    <div id="emptyState">
+      <div class="big">Say hello to your tutor.</div>
+      <div id="emptyHint">Tap the mic and just talk — the tutor replies in spoken 廣東話, with a transcript here. Talk over it any time to interrupt.</div>
+      <div id="starterChips">
+        <span class="starter-lbl">or send your first line:</span>
+        <button type="button" class="chip starter" data-text="Hello!">"Hello!"</button>
+        <button type="button" class="chip starter" data-text="早晨！" lang="zh-Hant">「早晨！」</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="dock">
+    <div id="typeRow">
+      <input id="typeInput" type="text" placeholder="Type to the tutor…" autocomplete="off"
+             aria-label="Type a message to the tutor">
+      <button type="button" id="sendBtn">Send</button>
+    </div>
+    <div id="meter" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+    <div id="statusRow">
+      <div id="status">Hold to talk</div>
+      <button type="button" id="endBtn" class="mini" hidden>End</button>
+    </div>
+    <button type="button" id="micBtn" class="idle" aria-label="Start session">
+      <span class="ring"></span>
+      <svg id="micIcon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"></rect>
+        <path d="M5.5 10.5a6.5 6.5 0 0 0 13 0"></path>
+        <line x1="12" y1="17.5" x2="12" y2="21"></line>
+        <line x1="9" y1="21" x2="15" y2="21"></line>
+      </svg>
+      <svg id="stopIcon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" hidden>
+        <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+      </svg>
+    </button>
+  </div>
+
+  <details id="debugDrawer">
+    <summary>Debug</summary>
+    <h2>Latency per turn (speech end &rarr; first audio)</h2>
+    <div id="latency"></div>
+    <h2>Raw upstream events</h2>
+    <div id="rawlog"></div>
+  </details>
+
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- state
+let ws = null;
+let sessionActive = false;     // user wants a live session (drives auto-reconnect)
+let manualClose = false;       // close was user-initiated: do not reconnect
+let reconnectAttempts = 0;
+const MAX_RECONNECTS = 3;
+
+let micCtx = null, micStream = null, micNode = null;
+let playCtx = null;
+let playQueue = [];            // AudioBufferSourceNodes scheduled/playing
+let nextPlayTime = 0;          // gapless scheduling cursor (playCtx time)
+let tutorSpeaking = false;
+
+let currentLang = "yue";
+const currentModel = "qwen3.5-omni-plus-realtime";   // plus only (flash removed 2026-08-07)
+let currentLevel = "beginner";
+// Interaction mode (2026-08-07): "ptt" (hold-to-talk — the default) or
+// "handsfree" (server-side semantic VAD). Remembered across visits;
+// switching reconnects the session (VAD config is per-session upstream).
+let mode = localStorage.getItem("vtalk-mode") || "ptt";
+let pttHeld = false;         // holding the talk button right now
+let pttCancel = false;       // slid off the button while holding (release = cancel)
+let pttBytes = 0;            // audio bytes sent during this hold
+let turnRef = null;            // {t, label} waiting for first tutor audio
+let responding = false;        // response.created .. response.done
+let recChunks = null;          // PCM chunks of the in-flight response (for Replay)
+let currentTutorBubble = null; // {el, textEl, replayBtn}
+let meterLevel = 0;
+const turnRegistry = new Map(); // server turn number -> {userEl, tutorEl}
+let typedQueue = [];           // texts typed before the session was open
+
+const LANG_LABEL = { yue: "廣東話", zh: "普通话", en: "English" };
+const LANG_TAG   = { yue: "zh-Hant", zh: "zh-Hans", en: "en" };
+
+const $ = id => document.getElementById(id);
+const chatEl = $("chat"), statusEl = $("status"), bannerEl = $("banner");
+const micBtn = $("micBtn"), micIcon = $("micIcon"), stopIcon = $("stopIcon");
+const endBtn = $("endBtn"), hfToggle = $("hfToggle");
+const typeInput = $("typeInput"), sendBtn = $("sendBtn");
+const meterBars = Array.from($("meter").children);
+
+// One equalizer element, moved into whichever tutor bubble is playing.
+const eqEl = document.createElement("span");
+eqEl.className = "eq";
+eqEl.hidden = true;
+eqEl.innerHTML = "<i></i><i></i><i></i>";
+
+function setStatus(s) { statusEl.textContent = s; }
+function showBanner(msg) { bannerEl.hidden = false; bannerEl.textContent = msg; }
+function clearBanner() { bannerEl.hidden = true; bannerEl.textContent = ""; }
+
+// ---------------------------------------------------------------- debug logging
+function addLatency(ms, label) {
+  const div = document.createElement("div");
+  div.textContent = `turn @${new Date().toLocaleTimeString()} — ${ms} ms (from ${label})`;
+  $("latency").prepend(div);
+}
+function rawLog(obj) {
+  const box = $("rawlog");
+  const div = document.createElement("div");
+  const { type, ...rest } = obj;
+  div.textContent = new Date().toISOString().slice(11, 23) + " " + type + " " +
+    JSON.stringify(rest).slice(0, 500);
+  box.appendChild(div);
+  while (box.childElementCount > 400) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---------------------------------------------------------------- mic capture
+// AudioWorklet source (inline via Blob URL): forwards Float32 blocks, batched ~4k samples.
+const WORKLET_SRC = `
+class PCMWorklet extends AudioWorkletProcessor {
+  constructor() { super(); this.chunks = []; this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch && ch.length) {
+      this.chunks.push(ch.slice(0)); this.n += ch.length;
+      if (this.n >= 4096) {
+        const out = new Float32Array(this.n);
+        let o = 0;
+        for (const c of this.chunks) { out.set(c, o); o += c.length; }
+        this.port.postMessage(out, [out.buffer]);
+        this.chunks = []; this.n = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-worklet', PCMWorklet);
+`;
+
+async function startMic() {
+  if (micStream) return;       // keep the mic across WS reconnects
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 }
+  });
+  // Reuse the context unlockAudio() may have created in the tap gesture.
+  if (!micCtx) micCtx = new AudioContext();  // device rate, e.g. 48 kHz
+  if (micCtx.state === "suspended") await micCtx.resume();
+  const srcRate = micCtx.sampleRate;
+  await micCtx.audioWorklet.addModule(
+    URL.createObjectURL(new Blob([WORKLET_SRC], { type: "application/javascript" })));
+  const src = micCtx.createMediaStreamSource(micStream);
+  micNode = new AudioWorkletNode(micCtx, "pcm-worklet");
+  micNode.port.onmessage = (e) => {
+    updateMeter(e.data);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (mode === "ptt" && !pttHeld) return;   // push-to-talk: send only while held
+    const pcm = downsampleToPCM16(e.data, srcRate, 16000);
+    if (pcm.length) {
+      if (mode === "ptt") pttBytes += pcm.byteLength;
+      ws.send(pcm.buffer);                    // binary frame = raw PCM16 LE @16 kHz
+    }
+  };
+  src.connect(micNode);
+  // Keep the worklet pulled WITHOUT audible monitoring: route through a
+  // zero-gain node. (Connecting micNode straight to destination = live mic
+  // monitoring through the speakers: the tutor's own audio re-entered via the
+  // mic and was replayed through that loop — the "first syllable repeats for
+  // 1-2s" stutter, until the echo canceller adapted. 2026-08-07)
+  const muteGain = micCtx.createGain();
+  muteGain.gain.value = 0;
+  micNode.connect(muteGain);
+  muteGain.connect(micCtx.destination);
+}
+
+// Linear-interp decimation to 16 kHz + Float32 -> PCM16 LE. Same as the rig.
+function downsampleToPCM16(input, srcRate, dstRate) {
+  const ratio = srcRate / dstRate;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
+    const next = input[Math.min(i0 + 1, input.length - 1)];
+    const s = input[i0] + (next - input[i0]) * frac;
+    const c = Math.max(-1, Math.min(1, s));
+    out[i] = c < 0 ? c * 0x8000 : c * 0x7FFF;
+  }
+  return out;
+}
+
+function stopMic() {
+  if (micNode) { micNode.disconnect(); micNode = null; }
+  if (micCtx) { micCtx.close(); micCtx = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  meterLevel = 0;
+  renderMeter();
+}
+
+// ---------------------------------------------------------------- volume meter
+function updateMeter(f32) {
+  let sum = 0, n = 0;
+  for (let i = 0; i < f32.length; i += 4) { sum += f32[i] * f32[i]; n++; }  // stride sample is plenty
+  const rms = Math.sqrt(sum / Math.max(1, n));
+  meterLevel = Math.max(Math.min(1, rms * 5), meterLevel * 0.82);         // attack fast, decay slow
+  renderMeter();
+}
+function renderMeter() {
+  meterBars.forEach((bar, i) => bar.classList.toggle("on", meterLevel > (i + 1) / 6));
+}
+
+// ---------------------------------------------------------------- playback (24 kHz)
+function ensurePlayCtx() {
+  if (playCtx) return;
+  try { playCtx = new AudioContext({ sampleRate: 24000 }); }
+  catch (e) { playCtx = new AudioContext(); }  // buffer at 24k still resamples on playback
+}
+
+// iOS/Safari: an AudioContext created (or left suspended) outside a user
+// gesture produces a silent first reply (v9 bug F2). startSession() is always
+// reached from a tap/click, so create + resume both contexts there.
+function unlockAudio() {
+  ensurePlayCtx();
+  if (playCtx.state === "suspended") playCtx.resume();
+  if (!micCtx) micCtx = new AudioContext();
+  if (micCtx.state === "suspended") micCtx.resume();
+}
+
+function playPCM(arrayBuffer) {
+  ensurePlayCtx();
+  const int16 = new Int16Array(arrayBuffer);
+  const f32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768;
+  const buf = playCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const node = playCtx.createBufferSource();
+  node.buffer = buf;
+  node.connect(playCtx.destination);
+  // Small jitter buffer (100ms): upstream sends audio in bursts faster than
+  // realtime (30 deltas of 320ms each in ~2s) — a 30ms floor let the first
+  // chunk underrun before the second burst landed. 2026-08-07.
+  const t = Math.max(playCtx.currentTime + 0.10, nextPlayTime);  // gapless queue
+  node.start(t);
+  nextPlayTime = t + buf.duration;
+  playQueue.push(node);
+  node.onended = () => { playQueue = playQueue.filter(n => n !== node); };
+}
+
+function flushPlayback(reason) {
+  for (const n of playQueue) { try { n.stop(); } catch (e) { /* already stopped */ } }
+  playQueue = [];
+  nextPlayTime = 0;
+  if (reason) rawLog({ type: "client.playback_flushed", reason });
+}
+
+// ---------------------------------------------------------------- chat bubbles
+function hideEmptyState() { const e = $("emptyState"); if (e) e.style.display = "none"; }
+function scrollChat() { chatEl.scrollTop = chatEl.scrollHeight; }
+
+function makeBubble(cssClass) {
+  hideEmptyState();
+  const el = document.createElement("div");
+  el.className = "msg " + cssClass;
+  el.lang = LANG_TAG[currentLang];
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = cssClass === "tutor" ? "Tutor" : "You";
+  const text = document.createElement("div");
+  el.append(who, text);
+  chatEl.appendChild(el);
+  scrollChat();
+  return { el, textEl: text, replayBtn: null };
+}
+
+function ensureTutorBubble() {
+  if (!currentTutorBubble) currentTutorBubble = makeBubble("tutor");
+  return currentTutorBubble;
+}
+
+// Romanization sub-line under bubble text (jyutping/pinyin; absent for en).
+function addRomanLine(parent, roman) {
+  const d = document.createElement("div");
+  d.className = "roman";
+  d.textContent = roman;
+  parent.appendChild(d);
+}
+function setRomanLine(parent, roman) {   // add or replace
+  const old = parent.querySelector(".roman");
+  if (old) old.remove();
+  if (roman) addRomanLine(parent, roman);
+}
+
+function registerTurn(turn, key, el) {
+  if (turn == null) return;
+  const rec = turnRegistry.get(turn) || {};
+  rec[key] = el;
+  turnRegistry.set(turn, rec);
+}
+
+// Shared renderer for ASR transcripts and typed-text echoes: same bubble,
+// same romanization sub-line, same turn registration. NOTE: an ASR completed
+// event can arrive AFTER the tutor's reply has already started streaming —
+// insert the user bubble BEFORE the in-flight tutor bubble so the
+// conversation reads in order (2026-08-06).
+function renderUserTranscript(ev) {
+  const text = (ev.transcript || "").trim();
+  if (!text && !ev.transcript_unclear) return;
+  const b = makeBubble("user");
+  if (ev.transcript_unclear) {
+    // Wrong-script ASR misfire (e.g. Cantonese heard as Thai) — the tutor
+    // understood the audio fine; only the transcript was garbage.
+    b.textEl.textContent = "(couldn't transcribe that — the tutor still heard you)";
+    b.textEl.classList.add("unclear");
+  } else {
+    b.textEl.textContent = text;
+    if (ev.romanization) addRomanLine(b.el, ev.romanization);
+  }
+  registerTurn(ev.turn, "userEl", b.el);
+  if (currentTutorBubble) chatEl.insertBefore(b.el, currentTutorBubble.el);
+  scrollChat();
+}
+
+// Seal the in-flight response: freeze its audio chunks into a Replay button.
+function sealTutorBubble() {
+  const b = currentTutorBubble;
+  const chunks = recChunks;
+  currentTutorBubble = null;
+  recChunks = null;
+  if (!b || !chunks || !chunks.length) return;
+  if (!b.replayBtn) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "replay";
+    btn.textContent = "Replay";
+    btn.addEventListener("click", () => replayChunks(chunks));
+    b.el.appendChild(btn);
+    b.replayBtn = btn;
+  }
+  if (eqEl.parentNode === b.el) removeEq();
+}
+
+function removeEq() {
+  eqEl.hidden = true;
+  if (eqEl.parentNode) eqEl.parentNode.removeChild(eqEl);
+}
+
+// ---------------------------------------------------------------- replay (PCM16 24k -> WAV)
+function makeWav(pcmBytes, sampleRate) {
+  const buf = new ArrayBuffer(44 + pcmBytes.length);
+  const v = new DataView(buf);
+  const wstr = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  wstr(0, "RIFF"); v.setUint32(4, 36 + pcmBytes.length, true); wstr(8, "WAVE");
+  wstr(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);                 // PCM
+  v.setUint16(22, 1, true);                 // mono
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);    // byte rate
+  v.setUint16(32, 2, true);                 // block align
+  v.setUint16(34, 16, true);                // bits
+  wstr(36, "data"); v.setUint32(40, pcmBytes.length, true);
+  new Uint8Array(buf, 44).set(pcmBytes);
+  return buf;
+}
+
+// Only one replay at a time (2026-08-07): starting a new replay stops the
+// previous one; a new live tutor response also stops any replay (live audio
+// takes precedence). Replay is local-only playback — the mic/session are
+// unaffected (echo cancellation covers speaker playback).
+let currentReplay = null;   // {audio, url}
+
+function stopCurrentReplay() {
+  if (!currentReplay) return;
+  try { currentReplay.audio.pause(); } catch (e) { /* not started */ }
+  URL.revokeObjectURL(currentReplay.url);
+  currentReplay = null;
+}
+
+function replayChunks(chunks) {
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  if (!total) return;
+  const pcm = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) { pcm.set(new Uint8Array(c), o); o += c.byteLength; }
+  const url = URL.createObjectURL(new Blob([makeWav(pcm, 24000)], { type: "audio/wav" }));
+  stopCurrentReplay();
+  const audio = new Audio(url);
+  const entry = { audio, url };
+  currentReplay = entry;
+  audio.onended = () => { if (currentReplay === entry) currentReplay = null; URL.revokeObjectURL(url); };
+  audio.onerror = () => { if (currentReplay === entry) currentReplay = null; URL.revokeObjectURL(url); showBanner("Replay failed in this browser."); };
+  audio.play().catch(() => showBanner("Replay was blocked by the browser."));
+}
+
+// ---------------------------------------------------------------- upstream events
+function friendlyError(ev) {
+  const m = (ev.error && ev.error.message) || ev.message || "";
+  if (/DASHSCOPE_API_KEY/.test(m)) {
+    return "The server has no API key. Set DASHSCOPE_API_KEY and restart server.py (see README).";
+  }
+  if (/failed to connect to DashScope/i.test(m)) {
+    return "The server could not reach the DashScope API. Check the network and key, then tap the mic to retry.";
+  }
+  return m || "Something went wrong on the server. Details are in the debug drawer below.";
+}
+
+function handleEvent(ev) {
+  rawLog(ev);
+  switch (ev.type) {
+    case "session.created":
+    case "session.updated":
+      break;
+
+    case "input_audio_buffer.speech_started":
+      flushPlayback("speech_started (barge-in)");   // cut tutor audio immediately
+      sealTutorBubble();
+      turnRef = null;
+      break;
+
+    case "input_audio_buffer.speech_stopped":
+      turnRef = { t: performance.now(), label: "speech_stopped" };
+      break;
+
+    case "response.created":
+      sealTutorBubble();                            // previous turn, if done never arrived
+      stopCurrentReplay();                          // live tutor audio takes precedence
+      responding = true;
+      recChunks = [];
+      if (!turnRef) turnRef = { t: performance.now(), label: "response.created" };
+      break;
+
+    case "response.done":
+      responding = false;
+      sealTutorBubble();
+      break;
+
+    // User transcript appears when the turn completes (deltas are preview-only).
+    case "conversation.item.input_audio_transcription.completed":
+      renderUserTranscript(ev);
+      break;
+
+    // Typed input: the proxy echoes it back; the bubble renders only from this.
+    case "proxy.user_transcript":
+      renderUserTranscript(ev);
+      break;
+
+    // Async grammar card for a finished turn: append inside that turn's user bubble.
+    case "proxy.grammar": {
+      const rec = turnRegistry.get(ev.turn);
+      if (rec && rec.userEl) {
+        const card = document.createElement("div");
+        card.className = "gcard" + (ev.is_correct ? " ok" : "");
+        if (ev.is_correct) {
+          card.textContent = "✓ Nice — no corrections";
+        } else {
+          const corr = document.createElement("div");
+          corr.lang = LANG_TAG[currentLang];
+          corr.textContent = ev.corrected_text || "";
+          const expl = document.createElement("div");
+          expl.className = "gexpl";
+          expl.textContent = ev.explanation || "";
+          card.append(corr, expl);
+        }
+        rec.userEl.appendChild(card);
+        scrollChat();
+      }
+      break;
+    }
+
+    case "response.audio_transcript.delta": {
+      const b = ensureTutorBubble();
+      b.textEl.textContent += ev.delta || "";
+      scrollChat();
+      break;
+    }
+    case "response.audio_transcript.done":
+      if (currentTutorBubble && ev.transcript) {
+        currentTutorBubble.textEl.textContent = ev.transcript;
+        setRomanLine(currentTutorBubble.el, ev.romanization);
+        registerTurn(ev.turn, "tutorEl", currentTutorBubble.el);
+        scrollChat();
+      }
+      break;
+
+    case "error":
+      showBanner(friendlyError(ev));
+      break;
+  }
+}
+
+function onAudioFrame(buf) {
+  if (turnRef) { addLatency(Math.round(performance.now() - turnRef.t), turnRef.label); turnRef = null; }
+  ensureTutorBubble();
+  if (recChunks) recChunks.push(buf);               // accumulate for Replay
+  playPCM(buf);
+}
+
+// ---------------------------------------------------------------- UI state
+function renderState() {
+  micBtn.classList.remove("idle", "live", "speaking");
+  const wsOpen = ws && ws.readyState === WebSocket.OPEN;
+  if (!sessionActive) {
+    micBtn.classList.add("idle");
+    micIcon.hidden = false; stopIcon.hidden = true;
+    micBtn.setAttribute("aria-label", mode === "ptt" ? "Hold to talk" : "Start session");
+    setStatus(mode === "ptt" ? "Hold to talk" : "Tap to start");
+  } else if (wsOpen && tutorSpeaking) {
+    micBtn.classList.add("speaking");
+    micIcon.hidden = true; stopIcon.hidden = false;
+    micBtn.setAttribute("aria-label", "Interrupt the tutor");
+    setStatus(mode === "ptt" ? "Tutor is speaking… (hold to interrupt)" : "Tutor is speaking…");
+  } else {
+    micBtn.classList.add("live");
+    micIcon.hidden = false; stopIcon.hidden = true;
+    micBtn.setAttribute("aria-label", mode === "ptt" ? "Hold to talk" : "End session");
+    if (!wsOpen) setStatus(reconnectAttempts > 0 ? "Reconnecting…" : "Connecting…");
+    else setStatus(mode === "ptt" ? "Hold to talk" : "Listening…");
+  }
+  endBtn.hidden = !(mode === "ptt" && sessionActive);
+}
+
+// Speaking = anything in the gapless playback queue. Ticks keep the button,
+// status line, and bubble equalizer in sync with actual audio.
+setInterval(() => {
+  const speaking = playQueue.length > 0;
+  if (speaking !== tutorSpeaking) { tutorSpeaking = speaking; renderState(); }
+  if (speaking && currentTutorBubble) {
+    if (eqEl.parentNode !== currentTutorBubble.el) currentTutorBubble.el.appendChild(eqEl);
+    eqEl.hidden = false;
+  } else if (!speaking && eqEl.parentNode) {
+    removeEq();
+  }
+}, 120);
+
+// ---------------------------------------------------------------- connect / disconnect
+function connect() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const url = `${proto}://${location.host}/ws?lang=${encodeURIComponent(currentLang)}` +
+              `&model=${encodeURIComponent(currentModel)}&level=${encodeURIComponent(currentLevel)}` +
+              `&mode=${encodeURIComponent(mode)}`;
+  rawLog({ type: "client.connect", url });
+  turnRegistry.clear();                     // server turn numbering restarts per connection
+  ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = async () => {
+    reconnectAttempts = 0;
+    try { await startMic(); }
+    catch (e) {
+      showBanner("Microphone access was blocked. Allow the mic in the browser address bar, then tap to try again.");
+      manualClose = true;
+      if (ws) ws.close();
+      return;
+    }
+    renderState();
+    // Flush texts typed before the session was open.
+    while (typedQueue.length && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "user_text", text: typedQueue.shift() }));
+    }
+  };
+  ws.onmessage = (m) => {
+    if (typeof m.data === "string") {
+      try { handleEvent(JSON.parse(m.data)); } catch (e) { rawLog({ type: "client.bad_json" }); }
+    } else {
+      onAudioFrame(m.data);                   // binary = tutor PCM16 @24 kHz
+    }
+  };
+  ws.onclose = (e) => {
+    const wasSession = sessionActive;
+    ws = null;
+    responding = false;
+    tutorSpeaking = false;
+    flushPlayback();
+    removeEq();
+    sealTutorBubble();
+    if (!wasSession) { renderState(); return; }
+    if (manualClose || e.code === 1008) {     // 1008 = bad lang/model/key: no point retrying
+      endSession();
+      return;
+    }
+    if (reconnectAttempts < MAX_RECONNECTS) {
+      reconnectAttempts++;
+      renderState();                          // shows "Reconnecting…"
+      setTimeout(() => { if (sessionActive && !ws) connect(); }, 1500);
+    } else {
+      showBanner("The connection dropped and reconnecting failed. Tap the mic to start again.");
+      endSession();
+    }
+  };
+  ws.onerror = () => { /* onclose follows with the real teardown */ };
+}
+
+function startSession() {
+  clearBanner();
+  unlockAudio();          // iOS gesture window — create/resume audio contexts
+  sessionActive = true;
+  manualClose = false;
+  reconnectAttempts = 0;
+  renderState();
+  connect();
+}
+
+function endSession() {
+  sessionActive = false;
+  manualClose = true;
+  if (ws) { try { ws.close(); } catch (e) { /* already closed */ } ws = null; }
+  responding = false;
+  tutorSpeaking = false;
+  stopMic();
+  flushPlayback();
+  removeEq();
+  sealTutorBubble();
+  renderState();
+}
+
+function interrupt() {
+  flushPlayback("manual interrupt");
+  sealTutorBubble();
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "response.cancel" }));
+  tutorSpeaking = false;
+  renderState();
+}
+
+// ---------------------------------------------------------------- typed input
+function sendTypedNow(text) {
+  if (tutorSpeaking) {                      // typed barge-in: same flush as the mic path
+    flushPlayback("typed interrupt");
+    sealTutorBubble();
+    ws.send(JSON.stringify({ type: "response.cancel" }));
+    tutorSpeaking = false;
+    renderState();
+  }
+  ws.send(JSON.stringify({ type: "user_text", text }));
+}
+
+function submitTyped() {
+  const text = typeInput.value.trim();
+  if (!text) return;
+  typeInput.value = "";
+  if (!sessionActive) {
+    typedQueue.push(text);
+    startSession();                         // queue flushes in ws.onopen once the mic is up
+    return;
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) sendTypedNow(text);
+  else typedQueue.push(text);               // reconnecting: flushes on next onopen
+}
+
+sendBtn.addEventListener("click", submitTyped);
+typeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitTyped();
+});
+
+// Empty-state starter chips — same send path as typed text.
+document.querySelectorAll(".starter").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const text = btn.dataset.text || "";
+    if (!text) return;
+    if (!sessionActive) { typedQueue.push(text); startSession(); return; }
+    if (ws && ws.readyState === WebSocket.OPEN) sendTypedNow(text);
+    else typedQueue.push(text);             // reconnecting: flushes on next onopen
+  });
+});
+
+// ---------------------------------------------------------------- UI wiring
+micBtn.addEventListener("click", () => {
+  if (mode === "ptt") return;                 // ptt uses press-and-hold, not clicks
+  if (!sessionActive) startSession();
+  else if (tutorSpeaking) interrupt();
+  else endSession();
+});
+
+// ---------------------------------------------------------------- push-to-talk
+function pttDown() {
+  if (mode !== "ptt" || pttHeld) return;
+  if (document.activeElement === micBtn) micBtn.blur();   // so Space doesn't re-click it
+  if (!sessionActive) startSession();         // connects; the send gate opens once WS is OPEN
+  pttHeld = true;
+  pttCancel = false;
+  pttBytes = 0;
+  if (tutorSpeaking) {                        // holding to talk = barge-in
+    flushPlayback("ptt barge-in");
+    sealTutorBubble();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "response.cancel" }));
+    tutorSpeaking = false;
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));   // drop anything stale
+  }
+  micBtn.classList.add("recording");
+  setStatus("Release to send");
+}
+
+function pttRelease() {
+  if (!pttHeld) return;
+  pttHeld = false;
+  micBtn.classList.remove("recording");
+  if (!ws || ws.readyState !== WebSocket.OPEN) { renderState(); return; }
+  if (pttCancel || pttBytes < 9600) {         // slid off, or too short (<~0.3s): drop it
+    ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+    rawLog({ type: "client.ptt_drop", cancel: pttCancel, bytes: pttBytes });
+    renderState();
+    return;
+  }
+  turnRef = { t: performance.now(), label: "commit" };
+  ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+  ws.send(JSON.stringify({ type: "response.create" }));
+  renderState();
+}
+
+micBtn.addEventListener("pointerdown", (e) => {
+  if (mode !== "ptt") return;
+  e.preventDefault();
+  pttDown();
+});
+window.addEventListener("pointerup", () => { if (mode === "ptt") pttRelease(); });
+window.addEventListener("pointercancel", () => {
+  if (mode !== "ptt") return;
+  pttCancel = true;
+  pttRelease();
+});
+micBtn.addEventListener("pointerleave", () => {   // slide off = cancel (WeChat-style)
+  if (mode === "ptt" && pttHeld) { pttCancel = true; setStatus("Release to cancel"); }
+});
+micBtn.addEventListener("pointerenter", () => {
+  if (mode === "ptt" && pttHeld) { pttCancel = false; setStatus("Release to send"); }
+});
+
+// Spacebar = hold-to-talk on desktop (ptt mode).
+window.addEventListener("keydown", (e) => {
+  if (mode !== "ptt" || e.code !== "Space" || e.repeat) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "BUTTON")) return;
+  e.preventDefault();
+  pttDown();
+});
+window.addEventListener("keyup", (e) => {
+  if (mode !== "ptt" || e.code !== "Space") return;
+  e.preventDefault();
+  pttRelease();
+});
+
+endBtn.addEventListener("click", () => endSession());
+
+// Hands-free toggle: switch mode, remember it, reconnect the session (the VAD
+// config lives in session.update, so a live session can't change modes).
+function hintHTML() {
+  const label = `<span lang="${LANG_TAG[currentLang]}">${LANG_LABEL[currentLang]}</span>`;
+  return mode === "ptt"
+    ? `Hold the mic and talk — release to send. The tutor replies in spoken ${label}, with a transcript here. Slide off to cancel.`
+    : `Tap the mic and just talk — the tutor replies in spoken ${label}, with a transcript here. Talk over it any time to interrupt.`;
+}
+function renderMode() {
+  hfToggle.classList.toggle("active", mode === "handsfree");
+  hfToggle.setAttribute("aria-pressed", mode === "handsfree" ? "true" : "false");
+  $("emptyHint").innerHTML = hintHTML();
+}
+hfToggle.addEventListener("click", () => {
+  mode = mode === "ptt" ? "handsfree" : "ptt";
+  localStorage.setItem("vtalk-mode", mode);
+  renderMode();
+  renderState();
+  const wasActive = sessionActive;
+  endSession();
+  if (wasActive) startSession();
+});
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    const lang = chip.dataset.lang;
+    if (lang === currentLang) return;
+    if (sessionActive &&
+        !confirm(`Switch to ${LANG_LABEL[lang]}? The current session will end.`)) return;
+    endSession();
+    currentLang = lang;
+    document.querySelectorAll(".chip").forEach(x => x.classList.toggle("active", x === chip));
+    $("emptyHint").innerHTML = hintHTML();
+    clearBanner();
+    renderState();
+  });
+});
+
+document.querySelectorAll(".level-chip").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const level = btn.dataset.level;
+    if (level === currentLevel) return;
+    if (sessionActive &&
+        !confirm("Switch level? The session will reconnect with the new level.")) return;
+    const wasActive = sessionActive;
+    endSession();
+    currentLevel = level;
+    document.querySelectorAll(".level-chip").forEach(x => x.classList.toggle("active", x === btn));
+    if (wasActive) startSession();
+  });
+});
+
+// #preview — static demo content for design review / screenshots (no session
+// started). 2026-08-07. Open http://localhost:8899/#preview
+function injectPreview() {
+  const mk = (cls, who, text) => {
+    const b = makeBubble(cls);
+    b.textEl.textContent = text;
+    return b;
+  };
+  const rom = (b, s) => { const r = document.createElement("div"); r.className = "roman"; r.textContent = s; b.el.appendChild(r); };
+  const rep = (b) => { const btn = document.createElement("button"); btn.type = "button"; btn.className = "replay"; btn.textContent = "Replay"; b.el.appendChild(btn); };
+  const ok = (b) => { const c = document.createElement("div"); c.className = "gcard ok"; c.textContent = "✓ Nice — no corrections"; b.el.appendChild(c); };
+  const fix = (b, corr, expl) => {
+    const c = document.createElement("div"); c.className = "gcard";
+    const d = document.createElement("div"); d.textContent = corr;
+    const x = document.createElement("div"); x.className = "gexpl"; x.textContent = expl;
+    c.append(d, x); b.el.appendChild(c);
+  };
+
+  const t1 = mk("tutor", "Tutor", "Hi there, welcome! We say 早晨 — it means good morning. How is your day so far?");
+  rom(t1, "Hi there, welcome! We say zou2 san4 — it means good morning. How is your day so far?"); rep(t1);
+  const u1 = mk("user", "You", "我今日好開心，多謝老師。");
+  rom(u1, "ngo5 gam1 jat6 hou2 hoi1 sam1, do1 ze6 lou5 si1."); ok(u1);
+  const t2 = mk("tutor", "Tutor", "好開心！喺香港，朝早見面梗係講「早晨」。如果係下晝，你可以講「你好」。記住啦：「早晨」淨係朝早用㗎。");
+  rom(t2, "hou2 hoi1 sam1! hai2 hoeng1 gong2, zou2 caan4 gin3 min6 ding2 hai6 gong2 \"zou2 san4\". jyu4 gwo2 hai6 haa6 zau3, nei5 ho2 ji5 gong2 \"nei5 hou2\". gei3 zyu6 laa1: \"zou2 san4\" zing2 hai6 zou2 caan4 jung6 gaa3."); rep(t2);
+  const u2 = mk("user", "You", "我食咗三張貓。");
+  rom(u2, "ngo5 sik6 zo2 saam1 zoeng1 maau1.");
+  fix(u2, "我養咗三隻貓", "'張' is a counter for flat objects like paper; for animals use '隻'.");
+  const t3 = mk("tutor", "Tutor", "哈哈，差啲啦！「我養咗三隻貓」啱晒。你屋企有冇養寵物呀？");
+  rom(t3, "haa1 haa1, caa1 di1 laa1! \"ngo5 joeng5 zo2 saam1 zek3 maau1\" ngaam1 saai3. nei5 uk1 kei2 jau5 mou5 joeng5 cung2 mat6 aa1?"); rep(t3);
+  scrollChat();
+}
+if (location.hash === "#preview") injectPreview();
+
+renderMode();
+renderState();
+</script>
+</body>
+</html>

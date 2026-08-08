@@ -1,0 +1,21 @@
+.waveform {
+  display: inline-flex;
+  align-items: flex-end;
+}
+
+.waveform-bar {
+  display: inline-block;
+  border-radius: 1px;
+  transform: scaleY(0.35);
+  transform-origin: bottom;
+  transition: transform 0.2s ease;
+}
+
+.waveform-bar-active {
+  animation: waveform-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes waveform-pulse {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}

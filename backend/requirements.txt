@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+aiosqlite==0.20.0
+httpx==0.28.1
+tenacity==9.0.0
+loguru==0.7.3
+openai==1.59.8
+edge-tts==7.2.8
+setuptools==75.8.0
+python-multipart==0.0.20
+PyYAML==6.0.2
+pypinyin==0.55.0
+pycantonese==5.0.0

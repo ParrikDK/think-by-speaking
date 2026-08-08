@@ -1,0 +1,15 @@
+services:
+  tutor:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../backend/.env
+    volumes:
+      - tutor-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  tutor-data:

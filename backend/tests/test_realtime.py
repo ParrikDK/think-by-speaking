@@ -1,0 +1,556 @@
+"""Realtime WS tests (v11 M1, 2026-08-08) — hermetic: a fake DashScope
+upstream (websockets.sync.server on a background thread) stands in for
+wss://dashscope-intl.aliyuncs.com; services.grammar.check is mocked like
+every other external service in this suite.
+"""
+import asyncio
+import base64
+import json
+import threading
+import time
+
+import pytest
+from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosed
+from websockets.sync.server import serve
+
+from app.config import get_settings
+from app.db.database import get_db
+from app.realtime import languages as realtime_langs
+from app.routers import realtime as realtime_router
+
+pytestmark = pytest.mark.timeout(20)
+
+REPLY_TEXT = "你好！今日點呀？"
+TRANSCRIPT = "你好"
+
+
+class FakeDashScope:
+    """Scriptable fake of the DashScope realtime upstream.
+
+    Records every client event; on a PTT commit it 'transcribes'
+    next_transcript, and on response.create it plays a full tutor turn
+    (response.created → one audio delta → audio_transcript.done →
+    response.done). auto_done=False holds back response.done so a test can
+    cancel mid-response. Not an async server — runs on its own thread.
+    """
+
+    def __init__(self):
+        self.received: list[dict] = []
+        self._lock = threading.Lock()
+        self.next_transcript = TRANSCRIPT
+        self.next_reply = REPLY_TEXT
+        self.auto_done = True
+        self._audio = base64.b64encode(b"\x01\x00" * 2400).decode()  # 0.1s PCM16
+
+    def start(self):
+        self._server = serve(self._handler, "127.0.0.1", 0)
+        self.port = self._server.socket.getsockname()[1]
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self._server.shutdown()
+
+    def _handler(self, ws):
+        try:
+            for raw in ws:
+                self._on_event(ws, raw)
+        except ConnectionClosed:
+            pass  # the bridge aborts the upstream transport at teardown
+
+    def _on_event(self, ws, raw):
+        try:
+            event = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return
+        with self._lock:
+            self.received.append(event)
+        etype = event.get("type")
+        if etype == "input_audio_buffer.commit":
+            ws.send(json.dumps({
+                "type": "conversation.item.input_audio_transcription.completed",
+                "transcript": self.next_transcript,
+            }))
+        elif etype == "response.create":
+            ws.send(json.dumps({"type": "response.created"}))
+            ws.send(json.dumps({
+                "type": "response.audio.delta", "delta": self._audio,
+            }))
+            ws.send(json.dumps({
+                "type": "response.audio_transcript.done",
+                "transcript": self.next_reply,
+            }))
+            if self.auto_done:
+                ws.send(json.dumps({
+                    "type": "response.done", "response": {"status": "completed"},
+                }))
+        elif etype == "response.cancel":
+            ws.send(json.dumps({
+                "type": "response.done", "response": {"status": "cancelled"},
+            }))
+
+    def events(self, etype: str | None = None) -> list[dict]:
+        with self._lock:
+            snapshot = list(self.received)
+        if etype is None:
+            return snapshot
+        return [e for e in snapshot if e.get("type") == etype]
+
+    def wait_for(self, etype: str, timeout: float = 5.0) -> dict:
+        """Poll until an upstream-received event of this type exists."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            found = self.events(etype)
+            if found:
+                return found[-1]
+            time.sleep(0.01)
+        raise AssertionError(f"upstream never received {etype!r}; got {self.events()!r}")
+
+
+@pytest.fixture()
+def fake_upstream(monkeypatch):
+    """Point the bridge at the fake DashScope and hand it a dummy key."""
+    fake = FakeDashScope().start()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dashscope_realtime_url", f"ws://127.0.0.1:{fake.port}")
+    monkeypatch.setattr(settings, "dashscope_api_key", "test-dashscope-key")
+    yield fake
+    fake.stop()
+
+
+@pytest.fixture(autouse=True)
+def _clean_realtime_state(monkeypatch):
+    """No cross-test bleed: per-IP concurrency counters + grammar mocked off."""
+    realtime_router._active_by_ip.clear()
+
+    async def no_grammar(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.grammar.check", no_grammar)
+    yield
+    realtime_router._active_by_ip.clear()
+
+
+def ws_url(**params) -> str:
+    defaults = {"lang": "yue", "level": "beginner", "mode": "ptt"}
+    defaults.update(params)
+    qs = "&".join(f"{k}={v}" for k, v in defaults.items() if v is not None)
+    return f"/api/realtime/ws?{qs}"
+
+
+def next_message(ws, kinds=("json",)):
+    """Next browser message as ('json', dict) | ('bytes', bytes); skips
+    binary audio unless asked for."""
+    while True:
+        msg = ws.receive()
+        if msg.get("type") == "websocket.close":
+            raise WebSocketDisconnect(msg.get("code"), msg.get("reason"))
+        if msg.get("bytes") is not None:
+            if "bytes" in kinds:
+                return ("bytes", msg["bytes"])
+            continue
+        return ("json", json.loads(msg["text"]))
+
+
+def collect_until(ws, pred, limit=12) -> list[dict]:
+    """Read JSON events (skipping binary audio) until pred(event) or limit."""
+    seen = []
+    for _ in range(limit):
+        kind, payload = next_message(ws)
+        if kind == "bytes":
+            continue
+        seen.append(payload)
+        if pred(payload):
+            return seen
+    raise AssertionError(f"no matching event; saw {seen!r}")
+
+
+def ptt_turn(ws):
+    """One full PTT voice turn against the fake upstream."""
+    ws.send_text(json.dumps({"type": "input_audio_buffer.commit"}))
+    ws.send_text(json.dumps({"type": "response.create"}))
+
+
+# ── (a) session.update payload ────────────────────────────────────────
+
+def test_session_update_ptt_cantonese(client, fake_upstream):
+    with client.websocket_connect(ws_url(lang="yue", level="beginner", mode="ptt")) as ws:
+        update = fake_upstream.wait_for("session.update")
+    sess = update["session"]
+    assert sess["voice"] == "Kiki"
+    assert sess["turn_detection"] is None  # ptt → VAD off, client drives turns
+    assert sess["input_audio_transcription"] == {"model": "qwen3-asr-flash-realtime"}
+    assert "廣東話" in sess["instructions"]
+    assert "jyutping" in sess["instructions"]
+    assert "whose native language is English" in sess["instructions"]
+
+
+@pytest.mark.parametrize("level,silence", [("beginner", 1600), ("intermediate", 1100), ("fluent", 700)])
+def test_session_update_handsfree_semantic_vad(client, fake_upstream, level, silence):
+    with client.websocket_connect(ws_url(lang="zh", level=level, mode="handsfree")) as ws:
+        update = fake_upstream.wait_for("session.update")
+    sess = update["session"]
+    assert sess["voice"] == "Ethan"
+    assert sess["turn_detection"] == {
+        "type": "semantic_vad", "threshold": 0.5, "silence_duration_ms": silence,
+    }
+    assert "普通话" in sess["instructions"]
+
+
+@pytest.mark.parametrize("lang,voice", [
+    ("yue", "Kiki"), ("zh", "Ethan"), ("zh-TW", "Cindy"), ("en", "Jennifer"),
+    ("fr", "Emilien"), ("ja", "Ono Anna"),
+])
+def test_session_update_voice_per_language(client, fake_upstream, lang, voice):
+    with client.websocket_connect(ws_url(lang=lang)) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert update["session"]["voice"] == voice
+
+
+def test_session_update_scenario_and_native_language(client, fake_upstream):
+    from app.prompts import get_scenario
+
+    prompt = get_scenario("restaurant")["prompt"]
+    with client.websocket_connect(
+        ws_url(lang="fr", level="beginner", mode="ptt", scenario_id="restaurant", native="es")
+    ) as ws:
+        update = fake_upstream.wait_for("session.update")
+    instructions = update["session"]["instructions"]
+    assert "SCENARIO" in instructions and prompt in instructions
+    # Native language generalized (the spike hardcoded English).
+    assert "whose native language is Spanish" in instructions
+    assert "natural French words and Spanish" in instructions
+
+
+def test_continuation_hint_on_rollover_reconnect(client, fake_upstream):
+    """cont=1 (session-cap rollover, v11 M2) adds a skip-the-greeting hint."""
+    with client.websocket_connect(ws_url()) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert "continues an ongoing practice conversation" not in update["session"]["instructions"]
+    seen = len(fake_upstream.events("session.update"))
+    with client.websocket_connect(ws_url(cont="1")) as ws:
+        # Wait for THIS connection's session.update (wait_for would otherwise
+        # return the first connection's stale one and close before upstream
+        # connects).
+        deadline = time.time() + 5
+        while len(fake_upstream.events("session.update")) <= seen:
+            assert time.time() < deadline, "second session.update never arrived"
+            time.sleep(0.01)
+        update = fake_upstream.events("session.update")[-1]
+    assert "continues an ongoing practice conversation" in update["session"]["instructions"]
+
+
+# ── (b) ptt command forwarding ────────────────────────────────────────
+
+def test_ptt_commands_forwarded_and_cancel_guarded(client, fake_upstream):
+    with client.websocket_connect(ws_url(mode="ptt")) as ws:
+        fake_upstream.wait_for("session.update")
+        ws.send_text(json.dumps({"type": "response.cancel"}))  # nothing in flight
+        for cmd in ("input_audio_buffer.commit", "input_audio_buffer.clear", "response.create"):
+            ws.send_text(json.dumps({"type": cmd}))
+        fake_upstream.wait_for("response.create")
+        time.sleep(0.2)  # let any (buggy) cancel arrive
+    types = [e["type"] for e in fake_upstream.events()]
+    assert "input_audio_buffer.commit" in types
+    assert "input_audio_buffer.clear" in types
+    assert "response.create" in types
+    # response.cancel with no active response must NOT be forwarded
+    # (upstream errors on cancelling nothing).
+    assert "response.cancel" not in types
+
+
+def test_response_cancel_forwarded_while_responding(client, fake_upstream):
+    fake_upstream.auto_done = False  # response stays in flight
+    with client.websocket_connect(ws_url(mode="ptt")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        collect_until(ws, lambda e: e.get("type") == "response.created")
+        ws.send_text(json.dumps({"type": "response.cancel"}))
+        fake_upstream.wait_for("response.cancel")
+        events = collect_until(
+            ws, lambda e: e.get("type") == "response.done"
+        )
+    assert len(fake_upstream.events("response.cancel")) == 1
+    done = next(e for e in events if e.get("type") == "response.done")
+    assert done["response"]["status"] == "cancelled"
+
+
+def test_ptt_commands_not_forwarded_in_handsfree(client, fake_upstream):
+    with client.websocket_connect(ws_url(mode="handsfree")) as ws:
+        fake_upstream.wait_for("session.update")
+        ws.send_text(json.dumps({"type": "input_audio_buffer.commit"}))
+        ws.send_text(json.dumps({"type": "response.create"}))
+        time.sleep(0.3)
+    # handsfree = server-side VAD; manual turn commands stay client-side…
+    # only session.update should have arrived.
+    assert fake_upstream.events("input_audio_buffer.commit") == []
+    assert fake_upstream.events("response.create") == []
+
+
+def test_user_text_typed_turn(client, fake_upstream):
+    with client.websocket_connect(ws_url(lang="zh", mode="ptt")) as ws:
+        fake_upstream.wait_for("session.update")
+        ws.send_text(json.dumps({"type": "user_text", "text": "你好"}))
+        events = collect_until(ws, lambda e: e.get("type") == "response.done")
+    echo = next(e for e in events if e["type"] == "proxy.user_transcript")
+    assert echo["transcript"] == "你好" and echo["turn"] == 1
+    assert "nǐ" in echo["romanization"]
+    item = fake_upstream.wait_for("conversation.item.create")
+    assert item["item"]["content"][0] == {"type": "input_text", "text": "你好"}
+    assert fake_upstream.events("response.create")
+
+
+# ── (c) auth ──────────────────────────────────────────────────────────
+
+def test_bad_token_falls_back_to_guest(client, fake_upstream):
+    with client.websocket_connect(ws_url(token="bogus-token")) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert update["session"]["voice"] == "Kiki"  # session ran as a guest
+
+
+def test_registered_user_session_counts_stats(client, fake_upstream):
+    r = client.post("/api/auth/register", json={"username": "wsuser", "password": "pw"})
+    assert r.status_code == 201
+    token = r.json()["token"]
+    with client.websocket_connect(ws_url(lang="fr", token=token)) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        collect_until(ws, lambda e: e.get("type") == "response.done")
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    stats = me.json()["stats"]
+    assert stats["total_sessions"] == 1
+    assert stats["total_messages"] == 2  # user + assistant rows of the turn
+
+
+# ── (d) guest over trial ──────────────────────────────────────────────
+
+def test_guest_over_trial_gets_4001(client, fake_upstream, monkeypatch):
+    async def over_quota(user_id="", ip="", day=None):
+        return 9999
+
+    monkeypatch.setattr("app.db.usage_store.seconds_used_today", over_quota)
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect(ws_url()) as ws:
+            event = next_message(ws)[1]
+            assert event["type"] == "error"
+            assert event["error"]["code"] == "quota_exhausted"
+            next_message(ws)  # close follows the error event
+    assert excinfo.value.code == 4001
+    assert fake_upstream.events("session.update") == []  # never reached upstream
+
+
+# ── (e) transcript guards + romanization ──────────────────────────────
+
+def test_wrong_script_transcript_blanked_and_flagged(client, fake_upstream):
+    fake_upstream.next_transcript = "หรือว่าเนเน่ เดดดี้มา"  # Thai misfire (live-observed)
+    with client.websocket_connect(ws_url(lang="yue")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        events = collect_until(
+            ws, lambda e: e.get("type") == "conversation.item.input_audio_transcription.completed"
+        )
+    event = events[-1]
+    assert event["transcript"] == ""
+    assert event["transcript_unclear"] is True
+    assert event["raw_transcript"].startswith("หรือว่า")
+    assert event["turn"] == 1
+
+
+def test_cjk_transcript_gets_romanization_and_turn(client, fake_upstream):
+    with client.websocket_connect(ws_url(lang="zh")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        events = collect_until(ws, lambda e: e.get("type") == "response.done")
+    asr = next(
+        e for e in events
+        if e["type"] == "conversation.item.input_audio_transcription.completed"
+    )
+    assert asr["transcript"] == "你好"
+    assert asr["turn"] == 1
+    assert "nǐ" in asr["romanization"]
+    tutor = next(e for e in events if e["type"] == "response.audio_transcript.done")
+    assert tutor["transcript"] == REPLY_TEXT
+    assert tutor["turn"] == 1
+    assert "nǐ" in tutor["romanization"]
+
+
+# ── (f) grammar card on turn completion ───────────────────────────────
+
+def test_grammar_card_fires_on_completed_turn(client, fake_upstream, monkeypatch):
+    calls = []
+
+    async def fake_check(lang, level, native_language, user_text, tutor_text=""):
+        calls.append({"lang": lang, "level": level, "native": native_language,
+                      "user": user_text, "tutor": tutor_text})
+        return {"is_correct": False, "corrected_text": "我今日好開心",
+                "explanation": "Word order."}
+
+    monkeypatch.setattr("app.services.grammar.check", fake_check)
+    with client.websocket_connect(ws_url(lang="yue", level="intermediate")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.grammar")
+    card = next(e for e in events if e["type"] == "proxy.grammar")
+    assert card["turn"] == 1
+    assert card["is_correct"] is False
+    assert card["corrected_text"] == "我今日好開心"
+    assert calls == [{"lang": "yue", "level": "intermediate", "native": "en",
+                      "user": "你好", "tutor": REPLY_TEXT}]
+
+
+def test_grammar_not_fired_for_cancelled_turn(client, fake_upstream, monkeypatch):
+    calls = []
+
+    async def fake_check(*args, **kwargs):
+        calls.append(args)
+        return {"is_correct": True, "corrected_text": "", "explanation": ""}
+
+    monkeypatch.setattr("app.services.grammar.check", fake_check)
+    fake_upstream.auto_done = False
+    with client.websocket_connect(ws_url(mode="ptt")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        collect_until(ws, lambda e: e.get("type") == "response.created")
+        ws.send_text(json.dumps({"type": "response.cancel"}))
+        collect_until(ws, lambda e: e.get("type") == "response.done")
+        time.sleep(0.3)  # a buggy grammar task would have fired by now
+    # A cancelled response.done never completes the turn → no grammar task.
+    assert calls == []
+
+
+# ── (g) session-cap rollover ──────────────────────────────────────────
+
+def test_rollover_close_4000_when_audio_cap_hit(client, fake_upstream, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "realtime_max_audio_seconds", 1)  # 32 000 B in
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect(ws_url()) as ws:
+            fake_upstream.wait_for("session.update")
+            events = []
+            ws.send_bytes(b"\x00" * 20000)  # 0.625 s
+            ws.send_bytes(b"\x00" * 20000)  # 1.25 s → over the 1 s cap
+            while True:
+                kind, payload = next_message(ws, kinds=("json", "bytes"))
+                if kind == "json":
+                    events.append(payload)
+    assert excinfo.value.code == 4000
+    assert any(e.get("type") == "proxy.session_cap" for e in events)
+
+
+def test_guest_quota_close_is_4001_when_trial_below_cap(client, fake_upstream, monkeypatch):
+    """Trial smaller than the session cap → the mid-session close is the
+    quota code, not the rollover code."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "realtime_guest_trial_seconds", 1)
+
+    async def no_prior_usage(user_id="", ip="", day=None):
+        return 0  # isolate from other tests' usage flushes
+
+    monkeypatch.setattr("app.db.usage_store.seconds_used_today", no_prior_usage)
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect(ws_url()) as ws:
+            fake_upstream.wait_for("session.update")
+            events = []
+            ws.send_bytes(b"\x00" * 64000)  # 2 s of audio at once
+            while True:
+                kind, payload = next_message(ws, kinds=("json", "bytes"))
+                if kind == "json":
+                    events.append(payload)
+    assert excinfo.value.code == 4001
+    assert any(e.get("type") == "proxy.quota_exhausted" for e in events)
+
+
+# ── (h) unsupported language ──────────────────────────────────────────
+
+def test_unsupported_language_closed_1008(client, fake_upstream):
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect(ws_url(lang="el")) as ws:
+            event = next_message(ws)[1]
+            assert event["type"] == "error"
+            assert event["error"]["code"] == "unsupported_language"
+            assert "Greek" in event["error"]["message"]
+            next_message(ws)
+    assert excinfo.value.code == 1008
+    assert fake_upstream.events("session.update") == []
+
+
+def test_bad_level_and_mode_closed_1008(client, fake_upstream):
+    for params in ({"level": "A1"}, {"mode": "vox"}):
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect(ws_url(**params)) as ws:
+                assert next_message(ws)[1]["type"] == "error"
+                next_message(ws)
+        assert excinfo.value.code == 1008
+
+
+# ── (i) /api/languages realtime flag ──────────────────────────────────
+
+def test_languages_carry_realtime_flag(client):
+    langs = {l["code"]: l for l in client.get("/api/languages").json()}
+    assert langs["yue"]["realtime"] is True
+    assert langs["zh-TW"]["realtime"] is True
+    assert langs["fil"]["realtime"] is True   # via Tagalog
+    assert langs["el"]["realtime"] is False
+    assert langs["ta"]["realtime"] is False
+    assert set(realtime_langs.REALTIME_LANGS) == {
+        code for code, l in langs.items() if l["realtime"]
+    }
+
+
+# ── persistence: realtime turns land in the messages table ────────────
+
+def test_completed_turn_persisted_to_messages(client, fake_upstream):
+    r = client.post("/api/auth/register", json={"username": "hist", "password": "pw"})
+    token = r.json()["token"]
+
+    async def query():
+        db = get_db()
+        async with db.execute(
+            "SELECT m.role, m.text, m.pronunciation FROM messages m "
+            "JOIN sessions s ON s.id = m.session_id "
+            "WHERE s.user_id = (SELECT user_id FROM tokens WHERE token = ?) "
+            "ORDER BY m.seq",
+            (token,),
+        ) as cur:
+            return await cur.fetchall()
+
+    with client.websocket_connect(ws_url(lang="zh", token=token)) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        collect_until(ws, lambda e: e.get("type") == "response.done")
+        # Turns are flushed eagerly at completion — poll while the WS is
+        # still open (closing first would let the TestClient's
+        # cancel-on-close race the flush).
+        deadline = time.time() + 5
+        rows = []
+        while time.time() < deadline:
+            rows = asyncio.run(query())
+            if len(rows) >= 2:
+                break
+            time.sleep(0.05)
+    assert [(r["role"], r["text"]) for r in rows] == [
+        ("user", "你好"), ("assistant", REPLY_TEXT),
+    ]
+    assert "nǐ" in rows[0]["pronunciation"]
+
+
+# ── usage_store roundtrip (DB-level) ──────────────────────────────────
+
+def test_usage_audio_roundtrip(client):
+    from app.db import usage_store
+
+    async def scenario():
+        await usage_store.add_seconds("", "10.0.0.9", 7)
+        await usage_store.add_seconds("", "10.0.0.9", 5)
+        guest = await usage_store.seconds_used_today("", "10.0.0.9")
+        await usage_store.add_seconds("user-1", "", 30)
+        registered = await usage_store.seconds_used_today("user-1", "")
+        other_ip = await usage_store.seconds_used_today("", "10.0.0.10")
+        return guest, registered, other_ip
+
+    guest, registered, other_ip = asyncio.run(scenario())
+    assert guest == 12
+    assert registered == 30
+    assert other_ip == 0
