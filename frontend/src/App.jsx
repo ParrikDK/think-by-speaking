@@ -53,9 +53,15 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
 
   // Onboarding selections
+  // v12.1 (user-directed): the native language is ASSUMED to be the
+  // interaction language — nativeLang tracks uiLang below unless the
+  // learner picks a different one explicitly.
+  const nativePickedRef = useRef(false);
   const [nativeLang, setNativeLang] = useState(null);
   const [targetLang, setTargetLang] = useState(null);
-  const [level, setLevel] = useState(null);
+  // v12.1: default level so "Start learning" is enabled right after
+  // choosing a language (the greyed-out CTA was a dead end).
+  const [level, setLevel] = useState('beginner');
   const [accent, setAccent] = useState(() => localStorage.getItem('lf_accent') || 'american');
   const [scenario, setScenario] = useState(null); // null = free talk
 
@@ -100,7 +106,16 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = uiLang;
     localStorage.setItem('lf_ui_lang', uiLang);
+    // Native language = interaction language, until manually overridden.
+    if (nativePickedRef.current) return;
+    const l = STATIC_LANGUAGES.find((x) => x.code === uiLang);
+    if (l) setNativeLang({ code: l.code, name: l.english, native_name: l.native });
   }, [uiLang]);
+
+  const handleNativeSelect = (l) => {
+    nativePickedRef.current = true;
+    setNativeLang(l);
+  };
 
   // Persist accent preference across sessions
   useEffect(() => {
@@ -315,7 +330,7 @@ export default function App() {
           onLogin={() => setAuthMode('login')}
           onLogout={handleLogout}
           onProgress={() => setScreen('progress')}
-          onNativeSelect={setNativeLang}
+          onNativeSelect={handleNativeSelect}
           onTargetSelect={(l) => {
             // SetupScreen's dropdown uses the static list — re-attach the
             // API's realtime flag by code (v11 M2 routing).
