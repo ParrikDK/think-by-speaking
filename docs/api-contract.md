@@ -1,4 +1,4 @@
-# Speak, Don't Just Read — API Contract (v8 rebuild)
+# Speak, Don't Just Read — API Contract (v12, 2026-08-16)
 
 Backend: FastAPI on **port 8000** (canonical). Serves built frontend at `/` (static) and JSON API under `/api`.
 Frontend dev: Vite on :5173 proxying `/api` → :8000.
@@ -13,7 +13,7 @@ Exactly: `beginner`, `intermediate`, `fluent`. Any other value → 422. No A1/B2
 ## Endpoints
 
 ### GET /api/health
-→ `{ "status": "ok", "version": "8.0.0", "uptime_s": 123, "active_sessions": 2 }`
+→ `{ "status": "ok", "version": "12.0.0", "uptime_s": 123, "active_sessions": 2 }`
 
 ### GET /api/languages
 → `[{ "code": "zh", "name": "Chinese (Mandarin)", "native_name": "中文", "tts": "edge" | "elevenlabs", "realtime": true | false }, ...]`
@@ -21,7 +21,7 @@ The 31 target languages (28 from the contract list + cs/ms/ta matching the UI-na
 `realtime` (v11 M1, 2026-08-08): Qwen realtime S2S voice available for this language (`app/realtime/languages.py`); `false` → route to the cascade engine below.
 
 ### WS /api/realtime/ws (v11 M1, 2026-08-08)
-Params (query string — browser WS can't set headers): `lang`, `level`, `mode` (`ptt`|`handsfree`), `scenario_id` (optional), `native` (default `en`), `token` (optional; bad/absent = guest).
+Params (query string — browser WS can't set headers): `lang`, `level`, `mode` (`ptt`|`handsfree`), `scenario_id` (optional), `native` (default `en`), `token` (optional; bad/absent = guest), `cont` (optional; `cont=1` = reconnect after a session-cap rollover (close 4000), skips the greeting — v11 M2).
 Browser ⇄ proxy ⇄ DashScope qwen3.5-omni realtime bridge. Binary frames = PCM16 audio (16 kHz up / 24 kHz down); text frames = OpenAI-realtime-shaped events plus `proxy.*` events (`proxy.user_transcript`, `proxy.grammar`, `proxy.session_cap`, `proxy.quota_exhausted`). Client commands: `input_audio_buffer.commit/clear`, `response.create`, `response.cancel`, `user_text`.
 Close codes: 1008 bad params / unsupported language / missing key; 1011 upstream connect failed; 1013 concurrent-session cap per IP; 4000 session audio cap (client silently reconnects); 4001 daily quota exhausted (guests: `REALTIME_GUEST_TRIAL_SECONDS` per IP; users: `REALTIME_DAILY_MINUTES`). Completed turns persist into `messages`, so History/Progress work unchanged.
 
@@ -33,7 +33,7 @@ Passwords: PBKDF2-HMAC-SHA256 (stdlib hashlib, 100k iterations, per-user salt). 
 
 ### GET /api/scenarios?language=zh
 → `[{ "id": "restaurant", "title": "At the Restaurant", "description": "...", "icon": "🍜" }, ...]`
-Loaded from `app/prompts/scenarios/*.yaml`. Ship 8: restaurant, airport, hotel, shopping, doctor, taxi-directions, job-interview, small-talk. Language param reserved; return all.
+Loaded from `app/prompts/scenarios/*.yaml`. Ship 9: restaurant, airport, hotel, shopping, taxi-directions, job-interview, small-talk, appointment, at-work. Language param reserved; return all.
 
 ### POST /api/chat/init  (multipart form)
 Fields: `language` (target code), `native_language` (code), `level`, `scenario_id` (optional, empty string = free talk), `voice_id` (optional).

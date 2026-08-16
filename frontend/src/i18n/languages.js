@@ -27,6 +27,7 @@ const LANGUAGES = [
   { code: 'sv', native: 'Svenska', english: 'Swedish' },
   { code: 'ta', native: 'தமிழ்', english: 'Tamil' },
   { code: 'th', native: 'ไทย', english: 'Thai' },
+  { code: 'zh-TW', native: '繁體中文', english: 'Traditional Chinese' },
   { code: 'tr', native: 'Türkçe', english: 'Turkish' },
   { code: 'ur', native: 'اردو', english: 'Urdu' },
   { code: 'vi', native: 'Tiếng Việt', english: 'Vietnamese' },
@@ -36,7 +37,7 @@ const FLAGS = {
   ar: '🇸🇦', az: '🇦🇿', bn: '🇧🇩', yue: '🇭🇰', cs: '🇨🇿', nl: '🇳🇱',
   en: '🇬🇧', fil: '🇵🇭', fr: '🇫🇷', de: '🇩🇪', el: '🇬🇷', he: '🇮🇱',
   hi: '🇮🇳', id: '🇮🇩', it: '🇮🇹', ja: '🇯🇵', ko: '🇰🇷', ms: '🇲🇾',
-  zh: '🇨🇳', pl: '🇵🇱', pt: '🇵🇹', ru: '🇷🇺', es: '🇪🇸',
+  zh: '🇨🇳', 'zh-TW': '🇹🇼', pl: '🇵🇱', pt: '🇵🇹', ru: '🇷🇺', es: '🇪🇸',
   sw: '🇰🇪', sv: '🇸🇪', ta: '🇮🇳', th: '🇹🇭', tr: '🇹🇷', ur: '🇵🇰',
   vi: '🇻🇳',
 };

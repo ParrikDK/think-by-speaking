@@ -1,12 +1,13 @@
 # Speak, Don't Just Read
 
-Voice-first AI language tutor. Speak with an AI tutor in 28 languages — real-time
+Voice-first AI language tutor. Speak with an AI tutor in 31 languages — real-time
 speech-to-text, a level-aware tutor persona, grammar correction, and natural
 text-to-speech replies.
 Hands-free mode with on-device voice-activity detection. Typed input works too.
 
 **Stack:** FastAPI + SQLite (aiosqlite) · React 18 + Vite · DeepSeek (LLM) ·
-ElevenLabs (STT · primary TTS for Cantonese/Mandarin) · Edge-TTS (primary TTS for all other languages) · Silero VAD (client-side).
+ElevenLabs (STT · primary TTS for Cantonese/Mandarin) · Edge-TTS (primary TTS for all other languages) ·
+DashScope qwen3.5-omni (realtime speech-to-speech for hands-free mode) · Silero VAD (client-side).
 
 ---
 
@@ -52,6 +53,8 @@ python -m pytest              # unit + API tests (external services mocked)
 | `DEEPSEEK_API_KEY` | Tutor LLM (OpenAI-compatible API) |
 | `DEEPSEEK_MODEL` | Optional, default `deepseek-v4-pro` (tutor turns) |
 | `DEEPSEEK_MODEL_FAST` | Optional, default `deepseek-v4-flash` (cheap internal calls, e.g. nudge retry) |
+| `DASHSCOPE_API_KEY` | **Required for hands-free mode** — Qwen realtime speech-to-speech bridge; without it `/api/realtime/ws` errors |
+| `REALTIME_*` | Realtime quota knobs (guest trial seconds, daily minutes, concurrent sessions per IP) — see `.env.example` |
 | `ALLOWED_ORIGINS` | CORS origins, comma-separated |
 
 See `backend/.env.example` for the full list.
@@ -72,8 +75,8 @@ volume under Docker.
 
 - 🎙️ Voice conversation loop: speak → STT → tutor → TTS reply with translation
 - ⌨️ Typed input mode — text chat with the same tutor
-- 🗣️ Hands-free mode: on-device Silero VAD auto-detects end of speech, barge-in support
-- 📚 8 role-play scenarios (restaurant, airport, job interview, …) + free talk
+- 🗣️ Hands-free mode: on-device Silero VAD auto-detects end of speech, barge-in support — runs on the Qwen realtime speech-to-speech bridge (26 of the 31 languages; the rest fall back to the cascade engine)
+- 📚 9 role-play scenarios (restaurant, airport, hotel, shopping, taxi-directions, job interview, small talk, appointment, at work) + free talk
 - 📈 Grammar correction with explanations, woven into every reply
 - 👤 Optional accounts: session history, resume, progress dashboard, streaks
 - 🌍 UI translated into 28 languages

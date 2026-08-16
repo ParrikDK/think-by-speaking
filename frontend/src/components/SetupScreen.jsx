@@ -158,27 +158,21 @@ export default function SetupScreen({
           )}
         </section>
 
-        {/* Optional scenario */}
+        {/* Optional scenario — dropdown (10 options; >4 → dropdown per
+            user-directed 2026-08-16 rule) */}
         {scenarios.length > 0 && (
           <section className="setup-section">
             <h2 className="setup-title">{t('scenario.pick_title')}</h2>
-            <div className="setup-chips">
-              <button
-                className={`setup-chip ${scenarioId === '' ? 'setup-chip-active' : ''}`}
-                onClick={() => setScenarioId('')}
-              >
-                {t('scenario.free_talk')}
-              </button>
+            <select
+              className="select setup-native"
+              value={scenarioId}
+              onChange={(e) => setScenarioId(e.target.value)}
+            >
+              <option value="">{t('scenario.free_talk')}</option>
               {scenarios.map((s) => (
-                <button
-                  key={s.id}
-                  className={`setup-chip ${scenarioId === s.id ? 'setup-chip-active' : ''}`}
-                  onClick={() => setScenarioId(s.id)}
-                >
-                  {s.title}
-                </button>
+                <option key={s.id} value={s.id}>{s.title}</option>
               ))}
-            </div>
+            </select>
           </section>
         )}
 

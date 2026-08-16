@@ -3657,10 +3657,14 @@ const extra = {
 
 const CACHE = {};
 
+// v12 (2026-08-16): no Traditional Chinese UI translation yet — fall back
+// to the Simplified (zh) block instead of English.
+const FALLBACKS = { 'zh-TW': 'zh' };
+
 export function getTranslations(langCode) {
   if (CACHE[langCode]) return CACHE[langCode];
 
-  const lang = translations[langCode];
+  const lang = translations[langCode] || translations[FALLBACKS[langCode]];
   const extraLang = extra[langCode] || {};
 
   // Merge: English base → v8 English extras → language overrides → v8 language extras

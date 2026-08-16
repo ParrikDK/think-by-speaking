@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from app.config import get_settings
 from app.services.llm import (
     extract_json,
     normalize_payload,
@@ -490,11 +491,13 @@ class TestInvalidJsonNotSalvaged:
 # ── v10 (2026-08-06): DeepSeek v4 request parameters ────────────────────
 
 class TestV4RequestParams:
-    """Tutor calls use the real JSON output mode with thinking disabled
-    (v4 defaults to thinking ON — latency matters in a voice loop); the
-    fast nudge call uses the cheap fast model, also non-thinking."""
+    """Tutor calls use json_object + max_tokens 8192 with thinking ON.
+    v12 (2026-08-16, live-verified): thinking-off + json_object returns
+    EMPTY content on v4 (9/9), and 2048 max_tokens burns to nothing on
+    long persona prompts (~50%). The fast nudge call uses the cheap fast
+    model with thinking-off — plain text, best-effort."""
 
-    def test_chat_json_sends_json_mode_and_thinking_off(self, monkeypatch):
+    def test_chat_json_sends_json_mode_big_budget_thinking_on(self, monkeypatch):
         from types import SimpleNamespace
 
         seen = {}
@@ -513,10 +516,11 @@ class TestV4RequestParams:
         from app.services.llm import chat_json
         asyncio.run(chat_json([{"role": "user", "content": "hi"}], "yue"))
         assert seen["response_format"] == {"type": "json_object"}
-        assert seen["extra_body"] == {"thinking": {"type": "disabled"}}
-        assert seen["model"] == "deepseek-v4-pro"
+        assert seen["max_tokens"] == 8192  # v12: 2048 → empty content on v4 reasoning
+        assert "extra_body" not in seen or seen.get("extra_body") is None  # thinking ON (v12)
+        assert seen["model"] == get_settings().deepseek_model
 
-    def test_stream_sends_json_mode_and_thinking_off(self, monkeypatch):
+    def test_stream_sends_json_mode_big_budget_thinking_on(self, monkeypatch):
         from types import SimpleNamespace
 
         seen = {}
@@ -536,7 +540,8 @@ class TestV4RequestParams:
         asyncio.run(collect())
         assert seen["stream"] is True
         assert seen["response_format"] == {"type": "json_object"}
-        assert seen["extra_body"] == {"thinking": {"type": "disabled"}}
+        assert seen["max_tokens"] == 8192  # v12: 2048 → empty content on v4 reasoning
+        assert "extra_body" not in seen or seen.get("extra_body") is None  # thinking ON (v12)
 
     def test_fast_reply_uses_fast_model_thinking_off(self, monkeypatch):
         from types import SimpleNamespace

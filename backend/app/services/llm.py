@@ -11,11 +11,24 @@
 
 v10 (2026-08-06): DeepSeek v4 models. Thinking mode is explicitly DISABLED
 on every call (v4 defaults to thinking ON — first-token latency matters in
-a voice loop) and the tutor calls use the real JSON output mode
-(response_format json_object — v4 fixed the old empty-content bug that
-made v9 avoid it). The extra salvage-enrichment LLM call was deleted with
-it: json_object mode makes contract violations rare, and a local
-plain-text wrap covers the remainder.
+a voice loop; the toggle only *partially* works on v4-pro — live-measured
+2026-08-16: ~2.9k reasoning tokens with the toggle vs ~6.8k without).
+The extra salvage-enrichment LLM call was deleted in v10; a local
+plain-text wrap covers contract violations.
+
+v12 (2026-08-16): two live-verified fixes to the tutor calls.
+1. `max_tokens` 2048 → 8192: at 2048 the v4 models stochastically burn
+   the budget on reasoning and complete with EMPTY content (~50% on the
+   ~6.5k-char persona prompt) → every retry lands in the canned apology.
+2. `thinking: disabled` REMOVED from the tutor calls: thinking-off +
+   `response_format=json_object` returns empty content on v4 (9/9
+   failures live; the v10-era "thinking OFF for latency" choice predates
+   json_object). Thinking ON + json_object + a real budget completes
+   reliably with valid JSON. Latency is ~15-60s per turn on both
+   deepseek-v4-pro and deepseek-v4-flash (reasoning phase streams nothing
+   — the voice loop lives on the Qwen realtime bridge, not this path).
+The cheap nudge call (chat_reply_fast) still uses thinking-off — it is
+plain text, best-effort, and the caller keeps the original reply on "".
 """
 import json
 import re
@@ -37,10 +50,15 @@ _client: AsyncOpenAI | None = None
 
 # v4 defaults to thinking mode ON; the OpenAI-format toggle must go through
 # extra_body (https://api-docs.deepseek.com/guides/thinking_mode).
+# v12 (2026-08-16): used ONLY by the cheap nudge call — thinking-off +
+# json_object returns empty content on v4 (live-verified), so the tutor
+# calls leave thinking ON.
 _THINKING_OFF = {"thinking": {"type": "disabled"}}
 
-# Real JSON output mode — guaranteed valid JSON on v4 (both models ✓).
+# Real JSON output mode — json_object + a real token budget is the reliable
+# combo on v4 (see module docstring, v12 budget notes).
 _JSON_MODE = {"type": "json_object"}
+
 
 
 def _get_client(force_new: bool = False) -> AsyncOpenAI:
@@ -176,11 +194,12 @@ async def _complete_once(messages: list[dict], language: str = "en", native_lang
         model=settings.deepseek_model,
         messages=messages,
         temperature=0.4,
-        max_tokens=2048,
-        # v10 (2026-08-06): real JSON output mode — v4 fixed the empty-content
-        # bug that made v9 avoid json_object; thinking OFF for latency.
+        max_tokens=8192,
+        # v12 (2026-08-16): json_object + real budget + thinking ON.
+        # thinking-off + json_object returns EMPTY content on v4
+        # (live-verified 9/9); 2048 max_tokens burns to nothing on long
+        # persona prompts. This combo completes reliably.
         response_format=_JSON_MODE,
-        extra_body=_THINKING_OFF,
     )
     content = (response.choices[0].message.content or "").strip()
     if not content:
@@ -215,8 +234,13 @@ async def chat_json(messages: list[dict], language: str = "en", native_language:
 
 
 async def chat_reply_fast(messages: list[dict]) -> str:
-    """Reply-only regeneration (plain text, small max_tokens) — used for the
-    language-drift nudge retry so it costs a fraction of a full turn.
+    """Reply-only regeneration (plain text) — used for the language-drift
+    nudge retry so it costs a fraction of a full turn.
+
+    v12 (2026-08-16): max_tokens raised 200 → 2048 — at 200 the v4-flash
+    reasoning always consumed the budget and the nudge silently never
+    returned text (live-verified). The caller keeps the original reply on
+    "" either way.
 
     Returns the trimmed text, or "" on failure (caller keeps the original).
     """
@@ -225,7 +249,7 @@ async def chat_reply_fast(messages: list[dict]) -> str:
             model=get_settings().deepseek_model_fast,
             messages=messages,
             temperature=0.4,
-            max_tokens=200,
+            max_tokens=2048,
             extra_body=_THINKING_OFF,
         )
         return (response.choices[0].message.content or "").strip()
@@ -280,12 +304,12 @@ async def chat_json_stream(
                 model=settings.deepseek_model,
                 messages=messages,
                 temperature=0.4,
-                max_tokens=2048,
+                max_tokens=8192,
                 stream=True,
-                # v10 (2026-08-06): json_object composes with streaming on v4
-                # (tokens still arrive incrementally); thinking OFF for latency.
+                # v12 (2026-08-16): json_object + real budget + thinking ON
+                # — see _complete_once. The reasoning phase streams no
+                # content, so the first token is late but guaranteed.
                 response_format=_JSON_MODE,
-                extra_body=_THINKING_OFF,
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None

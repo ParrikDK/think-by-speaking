@@ -6,6 +6,7 @@
 *.db-shm
 logs/
 *.log
+*.pid
 
 # python
 .venv/
