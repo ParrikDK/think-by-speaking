@@ -53,10 +53,9 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
 
   // Onboarding selections
-  // v12.1 (user-directed): the native language is ASSUMED to be the
-  // interaction language — nativeLang tracks uiLang below unless the
-  // learner picks a different one explicitly.
-  const nativePickedRef = useRef(false);
+  // The native language IS the interaction language: nativeLang tracks
+  // uiLang below (v12.1 design; the setup-screen dropdown was removed
+  // 2026-08-17 — no manual override path remains).
   const [nativeLang, setNativeLang] = useState(null);
   const [targetLang, setTargetLang] = useState(null);
   // v12.1: default level so "Start learning" is enabled right after
@@ -106,16 +105,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = uiLang;
     localStorage.setItem('lf_ui_lang', uiLang);
-    // Native language = interaction language, until manually overridden.
-    if (nativePickedRef.current) return;
+    // Native language = interaction language (no longer overridable).
     const l = STATIC_LANGUAGES.find((x) => x.code === uiLang);
     if (l) setNativeLang({ code: l.code, name: l.english, native_name: l.native });
   }, [uiLang]);
-
-  const handleNativeSelect = (l) => {
-    nativePickedRef.current = true;
-    setNativeLang(l);
-  };
 
   // Persist accent preference across sessions
   useEffect(() => {
@@ -322,7 +315,6 @@ export default function App() {
           onUiLangChange={setUiLang}
           languages={languages}
           scenarios={scenarios}
-          nativeLang={nativeLang}
           targetLang={targetLang}
           level={level}
           accent={accent}
@@ -330,7 +322,6 @@ export default function App() {
           onLogin={() => setAuthMode('login')}
           onLogout={handleLogout}
           onProgress={() => setScreen('progress')}
-          onNativeSelect={handleNativeSelect}
           onTargetSelect={(l) => {
             // SetupScreen's dropdown uses the static list — re-attach the
             // API's realtime flag by code (v11 M2 routing).

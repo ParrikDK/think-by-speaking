@@ -84,6 +84,7 @@ def build_session_update(
     native_language: str = "en",
     scenario_prompt: str | None = None,
     continuation: bool = False,
+    asr_model: str = "gummy-realtime-v1",
 ) -> dict:
     """session.update payload. Field names per the qwen3.5-omni realtime docs.
 
@@ -99,9 +100,9 @@ def build_session_update(
             "voice": voice_for(lang),
             "input_audio_format": "pcm",
             "output_audio_format": "pcm",
-            # Enables user-speech transcription (separate ASR model, not
-            # configurable per docs).
-            "input_audio_transcription": {"model": "qwen3-asr-flash-realtime"},
+            # Enables user-speech transcription (separate display ASR
+            # model; the stronger tier via settings.realtime_asr_model).
+            "input_audio_transcription": {"model": asr_model},
             "turn_detection": (
                 None if mode == "ptt" else {
                     "type": "semantic_vad",
@@ -203,10 +204,14 @@ async def run_bridge(
     meter = _AudioMeter(
         user_id,
         client_ip,
-        limit_seconds=min(quota_remaining_seconds, session_cap),
-        # Quota-limited sessions close 4001 (upsell); otherwise the upstream
-        # session cap closes 4000 (silent reconnect).
-        close_code=4001 if quota_remaining_seconds < session_cap else 4000,
+        # Daily quota enforcement disabled (2026-08-17, personal deploy —
+        # no accounts, no limits): the meter only enforces the upstream
+        # session cap (540 s), closing 4000 so the client silently
+        # reconnects. The 4001 quota/upsell close is dead code.
+        # limit_seconds=min(quota_remaining_seconds, session_cap),
+        # close_code=4001 if quota_remaining_seconds < session_cap else 4000,
+        limit_seconds=session_cap,
+        close_code=4000,
     )
 
     # --- connect upstream ----------------------------------------------
@@ -227,7 +232,8 @@ async def run_bridge(
         return
 
     await upstream.send(json.dumps(build_session_update(
-        lang, level, mode, native_language, scenario_prompt, continuation
+        lang, level, mode, native_language, scenario_prompt, continuation,
+        asr_model=settings.realtime_asr_model,
     )))
     logger.info(
         "REALTIME SESSION start id={} lang={} level={} mode={} native={} user={}",
@@ -250,8 +256,9 @@ async def run_bridge(
             return ""
 
     async def close_for_meter():
-        """Quota/session-cap close: explanatory event, then the code the
-        client keys its behavior on (4000 reconnect / 4001 upsell)."""
+        """Session-cap close: explanatory event, then the code the client
+        keys its behavior on (4000 reconnect; 4001 upsell is dead since the
+        daily quota was disabled 2026-08-17)."""
         kind = "quota_exhausted" if meter.close_code == 4001 else "session_cap"
         logger.info(
             "REALTIME {} id={} after {:.1f}s audio",

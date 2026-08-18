@@ -203,4 +203,17 @@ def build_instructions(
             "This session continues an ongoing practice conversation — "
             "skip any greeting and continue naturally."
         )
+    if lang != native_language:
+        # Code-switch pronunciation (2026-08-17): the omni TTS anglicized
+        # embedded target words — "superbe" was read with English phonetics
+        # inside an English sentence. Explicit pronunciation fidelity beats
+        # that default; enunciation speed helps beginners catch the sound.
+        target_name = LANGUAGE_NAMES.get(lang, lang)
+        parts.append(
+            f"PRONUNCIATION — when you say a {target_name} word or phrase "
+            f"inside a {native_name} sentence, pronounce it with authentic "
+            f"{target_name} pronunciation, clearly and slightly slowly — "
+            f"never with {native_name} phonetics, no matter how the word "
+            "looks."
+        )
     return " ".join(parts)

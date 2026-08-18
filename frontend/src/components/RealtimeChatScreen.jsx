@@ -91,12 +91,19 @@ export default function RealtimeChatScreen({
   const langTag = langTagFor(targetLang.code);
   const langLabel = targetLang.native_name || targetLang.name || '';
 
-  // Auto-scroll to the newest bubble (the spike scrolls on every append/delta).
-  const lastMsg = rt.messages[rt.messages.length - 1];
+  // Auto-scroll to the newest bubble on ANY message-content change. The
+  // old length+last-text deps missed content landing on non-last messages
+  // (the ASR user bubble is spliced BEFORE the in-flight tutor bubble, and
+  // romanization/grammar cards arrive after the turn) - those grew the
+  // list without triggering a scroll. Always pins to bottom, per the user
+  // (2026-08-17: "keep it bottom most automatically").
+  const msgsSig = rt.messages.map(
+    (m) => `${m.text}|${m.romanization}|${m.grammar}|${m.unclear}`
+  ).join('||');
   useEffect(() => {
     const el = chatRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [rt.messages.length, lastMsg?.text, rt.quotaCard]);
+  }, [msgsSig, rt.quotaCard]);
 
   // Window-level PTT listeners: release anywhere ends the hold; spacebar is
   // hold-to-talk on desktop (skipped while typing — activeElement check).

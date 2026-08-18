@@ -109,28 +109,35 @@ async def realtime_ws(
         await websocket.close(code=1013)
         return
 
-    # ── quota: check at accept; the bridge meters + enforces mid-session ──
+    # ── quota ──
+    # Daily quota enforcement DISABLED (2026-08-17, personal deploy — no
+    # accounts, no limits): the guest trial (realtime_guest_trial_seconds)
+    # and the registered-user daily minutes never trigger. The upstream
+    # 540 s session cap still rolls the connection silently (code 4000,
+    # qwen_bridge._AudioMeter) — that is a DashScope API constraint, not
+    # an account limit.
+    #
+    # cap_seconds = (
+    #     settings.realtime_daily_minutes * 60
+    #     if user
+    #     else settings.realtime_guest_trial_seconds
+    # )
+    # try:
+    #     used = await usage_store.seconds_used_today(user_id, client_ip)
+    # except Exception as exc:
+    #     logger.error("usage_audio read failed: {}", exc)
+    #     used = 0
+    # remaining = cap_seconds - used
+    # if remaining <= 0:
+    #     await qwen_bridge.send_error(
+    #         websocket,
+    #         "daily realtime voice quota used up — come back tomorrow"
+    #         + ("" if user else ", or create a free account for more"),
+    #         code="quota_exhausted",
+    #     )
+    #     await websocket.close(code=4001)
+    #     return
     user_id = user.id if user else ""
-    cap_seconds = (
-        settings.realtime_daily_minutes * 60
-        if user
-        else settings.realtime_guest_trial_seconds
-    )
-    try:
-        used = await usage_store.seconds_used_today(user_id, client_ip)
-    except Exception as exc:
-        logger.error("usage_audio read failed: {}", exc)
-        used = 0
-    remaining = cap_seconds - used
-    if remaining <= 0:
-        await qwen_bridge.send_error(
-            websocket,
-            "daily realtime voice quota used up — come back tomorrow"
-            + ("" if user else ", or create a free account for more"),
-            code="quota_exhausted",
-        )
-        await websocket.close(code=4001)
-        return
 
     session = await create_session(
         lang, level, native, scenario, voice_for(lang), user
@@ -148,7 +155,8 @@ async def realtime_ws(
             session=session,
             user_id=user_id,
             client_ip=client_ip,
-            quota_remaining_seconds=float(remaining),
+            # Quota disabled (see above) — the bridge ignores this value.
+            quota_remaining_seconds=float(settings.realtime_max_audio_seconds),
             continuation=bool(cont),
         )
     finally:

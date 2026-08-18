@@ -4,11 +4,11 @@ import LANGUAGES from '../i18n/languages';
 
 const LEVELS = ['beginner', 'intermediate', 'fluent'];
 
-// Pinned languages shown in a "Popular" optgroup at the top of each
-// dropdown (user-directed 2026-08-03): learning = Mandarin, Cantonese,
-// English; native = English.
+// Pinned languages shown in a "Popular" optgroup at the top of the
+// learning-language dropdown (user-directed 2026-08-03): Mandarin,
+// Cantonese, English. The native language has no dropdown — it is
+// implicitly the interaction (UI) language (v12.1 design).
 const POPULAR_LEARN = ['zh', 'yue', 'en'];
-const POPULAR_NATIVE = ['en'];
 
 const ENGLISH_ACCENTS = {
   american: '🇺🇸 American',
@@ -43,9 +43,9 @@ function LangOptions({ t, pinnedCodes }) {
 
 export default function SetupScreen({
   lang, uiLang, onUiLangChange, languages, scenarios,
-  nativeLang, targetLang, level, accent, user,
+  targetLang, level, accent, user,
   onLogin, onLogout, onProgress, onStart,
-  onNativeSelect, onTargetSelect, onLevelSelect, onAccentChange,
+  onTargetSelect, onLevelSelect, onAccentChange,
 }) {
   const t = useT(lang);
   const [scenarioId, setScenarioId] = useState('');
@@ -95,20 +95,9 @@ export default function SetupScreen({
       </nav>
 
       <div className="setup-body">
-        {/* Native language — dropdown (31 options don't fit as chips) */}
-        <section className="setup-section">
-          <h2 className="setup-title">{t('native.title')}</h2>
-          <select
-            className="select setup-native"
-            value={nativeLang?.code || 'en'}
-            onChange={(e) => {
-              const l = LANGUAGES.find((x) => x.code === e.target.value);
-              if (l) onNativeSelect(l);
-            }}
-          >
-            <LangOptions t={t} pinnedCodes={POPULAR_NATIVE} />
-          </select>
-        </section>
+        {/* No native-language dropdown: it is implicitly the interaction
+            (UI) language — the tutor explains in whatever language the
+            interface runs in (v12.1 design, dropdown removed 2026-08-17). */}
 
         {/* Learning language — dropdown */}
         <section className="setup-section">

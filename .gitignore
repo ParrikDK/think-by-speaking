@@ -25,6 +25,9 @@ backend/app/static/
 # os
 .DS_Store
 
+# local macOS launcher (Automator app bundle) — not part of the product
+Tutor Server.app/
+
 # buffer/ — audit workspace with conversation logs, screenshots, raw captures.
 # NEVER commit this folder: it can contain transcripts with real API keys.
 buffer/

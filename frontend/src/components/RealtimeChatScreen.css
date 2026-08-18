@@ -299,9 +299,17 @@
   font-size: 13px;
   color: var(--color-ink-muted);
   min-height: 20px;
+  /* Status text is a live label, never selectable — keeping it so also
+     keeps the iOS loupe from popping if a press lands on it. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
-/* The mic is the primary action — always filled (2026-08-07 review). */
+/* The mic is the primary action — always filled (2026-08-07 review).
+   Press-and-hold mobile hygiene (2026-08-17): iOS long-press magnifier /
+   callout would pop over the button's text selection, and a stuck :hover
+   scaled the button on touch — none of these may trigger. */
 .rt-mic {
   position: relative;
   width: 76px;
@@ -316,9 +324,18 @@
   border: 2px solid var(--color-voice);
   color: #fff;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  touch-action: manipulation;              /* no double-tap zoom, no 300ms delay */
+  -webkit-user-select: none;               /* no loupe magnifier while holding */
+  user-select: none;
+  -webkit-touch-callout: none;             /* no iOS callout (copy/translate) menu */
+  -webkit-tap-highlight-color: transparent; /* no gray flash on tap */
 }
-.rt-mic-idle:hover {
-  transform: scale(1.04);
+/* Hover-scale only for devices with a real pointer — touch holds :hover
+   while pressing, which reads as "button zooms in". */
+@media (hover: hover) {
+  .rt-mic-idle:hover {
+    transform: scale(1.04);
+  }
 }
 .rt-ring {
   position: absolute;

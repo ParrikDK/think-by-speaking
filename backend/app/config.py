@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     realtime_guest_trial_seconds: int = 120  # guest trial, per IP per day
     realtime_daily_minutes: int = 30         # registered users, per day
     realtime_max_concurrent_per_ip: int = 2
+    # Display-ASR model for user-speech bubbles inside the realtime session.
+    # qwen3-asr-flash misrecognizes Cantonese (wrong-script or wrong chars
+    # while the omni model understands the audio). gummy-realtime-v1 is the
+    # better tier documented for the omni-realtime series (docs, 2026-07-02);
+    # flip back to qwen3-asr-flash-realtime if upstream rejects it.
+    realtime_asr_model: str = "gummy-realtime-v1"
 
     # ── TTS ──
     # Edge-TTS is the primary provider for every language (native voices

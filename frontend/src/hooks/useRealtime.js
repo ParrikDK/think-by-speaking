@@ -241,9 +241,13 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
       nextPlayTimeRef.current = 0;
     };
 
-    // ── replay: only one at a time; a new live response stops any replay
-    // (live audio takes precedence). Local-only playback — the mic/session
-    // are unaffected (echo cancellation covers speaker playback).
+    // ── replay: only one at a time, and never alongside live audio —
+    // starting a replay cuts the live queue AND any in-flight response
+    // (mutual exclusion with the response.created handler, which stops the
+    // replay when a new reply starts). Deliberately NOT cut by
+    // speech_started: the user speaks along with a looping replay to mimic
+    // pronunciation. Local-only playback — the mic/session are unaffected
+    // (echo cancellation covers speaker playback).
     const stopCurrentReplay = () => {
       const cur = currentReplayRef.current;
       if (!cur) return;
@@ -255,6 +259,9 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
     const replayChunks = (chunks) => {
       const total = chunks.reduce((n, c) => n + c.byteLength, 0);
       if (!total) return;
+      flushPlayback();                         // cut any live tutor audio still in the queue
+      stopCurrentReplay();                     // cut the previous replay, if one is playing
+      if (respondingRef.current) sendJSON({ type: 'response.cancel' });  // kill the in-flight reply so its tail can't re-schedule
       const pcm = new Uint8Array(total);
       let o = 0;
       for (const c of chunks) { pcm.set(new Uint8Array(c), o); o += c.byteLength; }
@@ -448,6 +455,11 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
     };
 
     const onAudioFrame = (buf) => {
+      // While a replay plays, ignore straggler deltas of a cancelled
+      // response (sent upstream by replayChunks) — they'd otherwise
+      // re-schedule over the replay. A fresh response stops the replay via
+      // response.created before its deltas flow.
+      if (currentReplayRef.current) return;
       if (turnRefRef.current) {
         addLatency(Math.round(performance.now() - turnRefRef.current.t), turnRefRef.current.label);
         turnRefRef.current = null;
