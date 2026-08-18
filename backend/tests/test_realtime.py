@@ -560,3 +560,25 @@ def test_usage_audio_roundtrip(client):
     assert guest == 12
     assert registered == 30
     assert other_ip == 0
+
+
+# ── (h) learner profile passthrough (v13 — the personalization moat) ──
+
+def test_profile_injected_into_realtime_instructions(client, fake_upstream):
+    """The WS profile param reaches the coach's session.update instructions."""
+    import urllib.parse
+
+    profile = urllib.parse.quote('{"interests": ["tech"], "style": "socratic"}')
+    with client.websocket_connect(ws_url(lang="en", level="intermediate", profile=profile)) as ws:
+        update = fake_upstream.wait_for("session.update")
+    instructions = update["session"]["instructions"]
+    assert "LEARNER PROFILE" in instructions
+    assert "tech" in instructions
+    assert "socratic" in instructions
+
+
+def test_malformed_profile_ignored(client, fake_upstream):
+    """Bad profile JSON must not break the connection (server drops it)."""
+    with client.websocket_connect(ws_url(lang="en", profile="not-json")) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert "LEARNER PROFILE" not in update["session"]["instructions"]
