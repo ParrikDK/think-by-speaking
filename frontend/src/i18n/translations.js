@@ -118,7 +118,6 @@ const translations = {
 
   // ── Cantonese (粵語) ──
   yue: {
-    "login.title": "Speak, Don't Just Read",
     "login.welcome": "歡迎返嚟。",
     "login.signup_prompt": "建立帳戶開始練習講嘢。",
     "login.username": "用戶名",
@@ -215,7 +214,6 @@ const translations = {
 
   // ── Mandarin Chinese (中文) ──
   zh: {
-    "login.title": "Speak, Don't Just Read",
     "login.welcome": "欢迎回来。",
     "login.signup_prompt": "创建账户开始练习说话。",
     "login.username": "用户名",
@@ -312,7 +310,6 @@ const translations = {
 
   // ── French ──
   fr: {
-    "login.title": "Speak, Don't Just Read",
     "login.welcome": "Bon retour.",
     "login.signup_prompt": "Créez un compte pour commencer à parler.",
     "login.username": "Nom d'utilisateur",
@@ -383,7 +380,6 @@ const translations = {
     "scenario.general": "Conversation générale",
   }, // ── Spanish ──
   es: {
-    "login.title": "Speak, Don't Just Read",
     "login.welcome": "Bienvenido de nuevo.",
     "login.signup_prompt": "Crea una cuenta para empezar a hablar.",
     "login.username": "Usuario",
