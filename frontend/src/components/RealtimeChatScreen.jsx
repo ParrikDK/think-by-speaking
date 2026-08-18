@@ -31,7 +31,7 @@ const STARTER_GREETINGS = {
 
 // One chat bubble. Memoized — the mic meter re-renders the screen at
 // ~12 Hz while recording, and bubbles must not re-render with it.
-const RtBubble = memo(function RtBubble({ msg, speaking, langTag, t, onReplay }) {
+const RtBubble = memo(function RtBubble({ msg, lang, speaking, langTag, t, onReplay }) {
   const isTutor = msg.role === 'tutor';
   return (
     <div className={`rt-msg ${isTutor ? 'rt-msg-tutor' : 'rt-msg-user'}`} lang={langTag}>
@@ -232,6 +232,7 @@ export default function RealtimeChatScreen({
           <RtBubble
             key={m.id}
             msg={m}
+            lang={lang}
             langTag={langTag}
             t={t}
             speaking={rt.tutorSpeaking && m.id === rt.activeTutorId}

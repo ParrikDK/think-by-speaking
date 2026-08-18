@@ -111,6 +111,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile }
     const micCtxRef = { current: null };
     const micStreamRef = { current: null };
     const micNodeRef = { current: null };
+    const micBlockedRef = { current: false };  // v13: mic unavailable → typed+TTS still work
     const playCtxRef = { current: null };
     const playQueueRef = { current: [] };      // AudioBufferSourceNodes scheduled/playing
     const nextPlayTimeRef = { current: 0 };    // gapless scheduling cursor (playCtx time)
@@ -491,22 +492,25 @@ export default function useRealtime({ lang, level, scenarioId, native, profile }
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
-      ws.onopen = async () => {
+      ws.onopen = () => {
         reconnectAttemptsRef.current = 0;
         setReconnecting(false);
-        try {
-          await startMic();
-        } catch (e) {
-          setBanner('rt.mic_blocked');
-          manualCloseRef.current = true;
-          ws.close();
-          return;
-        }
         setWsOpen(true);
-        // Flush texts typed before the session was open.
+        // Flush texts typed before the session was open — typed debate and
+        // TTS playback never depend on the mic (v13: mic is optional).
         while (typedQueueRef.current.length && wsRef.current === ws
                && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'user_text', text: typedQueueRef.current.shift() }));
+        }
+        // Mic is best-effort: on failure the session STAYS OPEN with a
+        // banner; a later user gesture (pttDown) can retry it.
+        if (!micStreamRef.current) {
+          startMic()
+            .then(() => { micBlockedRef.current = false; })
+            .catch(() => {
+              micBlockedRef.current = true;
+              setBanner('rt.mic_blocked');
+            });
         }
       };
       ws.onmessage = (m) => {
@@ -599,6 +603,13 @@ export default function useRealtime({ lang, level, scenarioId, native, profile }
       pttDown() {
         if (modeRef.current !== 'ptt' || pttHeldRef.current) return;
         if (!sessionActiveRef.current) engine.start(); // connects; the send gate opens once WS is OPEN
+        if (micBlockedRef.current && !micStreamRef.current) {
+          // A hold is a user gesture — the browser may now allow the mic.
+          startMic().then(() => {
+            micBlockedRef.current = false;
+            setBanner(null);
+          }).catch(() => setBanner('rt.mic_blocked'));
+        }
         pttHeldRef.current = true;
         setPttHeld(true);
         pttCancelRef.current = false;
