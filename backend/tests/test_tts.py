@@ -69,12 +69,17 @@ class TestVoiceOptions:
             assert "name" in opt
 
     def test_each_option_voice_id_is_in_edge_map(self):
-        """Every option's voice_id appears in EDGE_TTS_VOICES."""
-        from app.services.tts import EDGE_TTS_VOICES
-        for language in ["ar", "fr", "es", "yue", "zh", "en", "xx"]:
+        """Every option's voice_id appears in EDGE_TTS_VOICES — except the
+        en picker (v13 accent×gender set, broader than the map by design)
+        and the realtime presets (provider 'realtime')."""
+        from app.services.tts import EDGE_TTS_VOICES, EN_VOICE_OPTIONS
+        en_picker_ids = {v["voice_id"] for v in EN_VOICE_OPTIONS}
+        for language in ["ar", "fr", "es", "yue", "zh", "xx"]:
             for opt in voice_options(language):
                 assert opt["provider"] == "edge"
                 assert opt["voice_id"] in EDGE_TTS_VOICES.values()
+        for opt in voice_options("en"):
+            assert opt["voice_id"] in EDGE_TTS_VOICES.values() or opt["voice_id"] in en_picker_ids or opt["provider"] == "realtime"
 
 
 # ── strip_annotations ─────────────────────────────────────────────────
@@ -108,7 +113,7 @@ class TestSynthesizeProviderOrder:
         the ElevenLabs key is present — edge wins."""
         import asyncio
 
-        async def fake_edge(language, text, speed):
+        async def fake_edge(language, text, speed, voice_name=None):
             return "EDGE_B64"
 
         mock_edge.side_effect = fake_edge
@@ -126,7 +131,7 @@ class TestSynthesizeProviderOrder:
         import asyncio
         from types import SimpleNamespace
 
-        async def fake_edge(language, text, speed):
+        async def fake_edge(language, text, speed, voice_name=None):
             raise RuntimeError("edge down")
 
         edge_patcher = patch("app.services.tts._synthesize_edge", side_effect=fake_edge)
@@ -172,7 +177,7 @@ class TestElevenLabsPrimaryLanguages:
         async def fake_eleven(text, language_, voice_id):
             return "ELEVEN_B64"
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             raise AssertionError("edge must not be tried before ElevenLabs")
 
         with (
@@ -191,7 +196,7 @@ class TestElevenLabsPrimaryLanguages:
         async def fake_eleven(text, language_, voice_id):
             raise RuntimeError("eleven down")
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             return "EDGE_B64"
 
         with (
@@ -207,7 +212,7 @@ class TestElevenLabsPrimaryLanguages:
 
         self._settings(monkeypatch, primary="yue", key="")
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             return "EDGE_B64"
 
         with (
@@ -226,7 +231,7 @@ class TestElevenLabsPrimaryLanguages:
 
         self._settings(monkeypatch, primary="yue")
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             return "EDGE_B64"
 
         with (
@@ -250,7 +255,7 @@ class TestElevenLabsPrimaryLanguages:
         async def fake_eleven(text, language_, voice_id):
             raise RuntimeError("eleven down")
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             raise RuntimeError("edge down")
 
         with (
@@ -266,7 +271,7 @@ class TestElevenLabsPrimaryLanguages:
 
         self._settings(monkeypatch, primary="yue", key="")
 
-        async def fake_edge(language_, text, speed):
+        async def fake_edge(language_, text, speed, voice_name=None):
             raise RuntimeError("edge down")
 
         with patch("app.services.tts._synthesize_edge", side_effect=fake_edge):
