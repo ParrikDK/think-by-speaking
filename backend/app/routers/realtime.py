@@ -61,6 +61,7 @@ async def realtime_ws(
     token: Optional[str] = None,
     cont: Optional[str] = None,
     profile: Optional[str] = None,
+    voice: Optional[str] = None,
 ):
     await websocket.accept()
     settings = get_settings()
@@ -173,6 +174,7 @@ async def realtime_ws(
             user_id=user_id,
             client_ip=client_ip,
             profile=profile_data,
+            voice=voice,
             # Quota disabled (see above) — the bridge ignores this value.
             quota_remaining_seconds=float(settings.realtime_max_audio_seconds),
             continuation=bool(cont),

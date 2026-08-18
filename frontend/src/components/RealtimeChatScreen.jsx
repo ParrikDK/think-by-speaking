@@ -72,6 +72,7 @@ export default function RealtimeChatScreen({
   scenario,
   nativeLang,
   profile,
+  voice,
   onEndSession,
   onLoginRequest,
 }) {
@@ -82,6 +83,7 @@ export default function RealtimeChatScreen({
     scenarioId: scenario?.id || '',
     native: nativeLang?.code || 'en',
     profile,
+    voice,
   });
   const { mode, pttDown, pttRelease, pttSetCancel } = rt;
 

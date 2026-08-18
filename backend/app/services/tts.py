@@ -59,13 +59,28 @@ EDGE_TTS_VOICES = {
     "ur": "ur-PK-AsadNeural",
     "az": "az-AZ-BabekNeural",
     "sw": "sw-KE-ZaliraNeural",
-    # English
-    "en": "en-US-ChristopherNeural",
+    # English — v13 user-directed (2026-08-18): British male is the default
+    "en": "en-GB-RyanNeural",
     # v7 UI languages kept for native-language honesty
     "cs": "cs-CZ-AntoninNeural",
     "ms": "ms-MY-OsmanNeural",
     "ta": "ta-IN-PallaviNeural",
 }
+
+# ── English voice picker (v13, user-directed 2026-08-18): accent × gender.
+# First entry is the default (British male). edge-tts voices, provider "edge".
+EN_VOICE_OPTIONS = [
+    {"voice_id": "en-GB-RyanNeural", "name": "🇬🇧 British male", "provider": "edge"},
+    {"voice_id": "en-GB-SoniaNeural", "name": "🇬🇧 British female", "provider": "edge"},
+    {"voice_id": "en-US-GuyNeural", "name": "🇺🇸 American male", "provider": "edge"},
+    {"voice_id": "en-US-JennyNeural", "name": "🇺🇸 American female", "provider": "edge"},
+    {"voice_id": "en-AU-WilliamNeural", "name": "🇦🇺 Australian male", "provider": "edge"},
+    {"voice_id": "en-AU-NatashaNeural", "name": "🇦🇺 Australian female", "provider": "edge"},
+]
+
+# Voices that look like edge-tts names (e.g. "en-GB-RyanNeural") — distinct
+# from ElevenLabs voice IDs (15-30 alphanumeric chars).
+_EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2}-[A-Za-z]+Neural$")
 
 # ── Default ElevenLabs voices per language (native voices that work) ─
 DEFAULT_VOICES = {
@@ -152,8 +167,12 @@ def strip_annotations(text: str) -> str:
     return text.strip()
 
 
-async def _synthesize_edge(language: str, text: str, speed: float) -> str:
-    voice = EDGE_TTS_VOICES.get(language)
+async def _synthesize_edge(
+    language: str, text: str, speed: float, voice_name: str | None = None
+) -> str:
+    """Edge-tts synthesis; `voice_name` (an edge voice id) overrides the
+    per-language default — the learner-picked voice (v13)."""
+    voice = voice_name or EDGE_TTS_VOICES.get(language)
     if not voice:
         raise ValueError(f"No edge-tts voice for language: {language}")
     communicate = edge_tts.Communicate(text, voice, rate=_speed_to_edge_rate(speed))
@@ -225,6 +244,10 @@ async def synthesize(
     tts_text = strip_annotations(text)
     if not tts_text:
         raise ValueError("empty text for TTS")
+    # v13 voice picker: an edge voice id (…-Neural) selects the edge voice;
+    # anything else is an ElevenLabs voice id (existing behavior).
+    edge_voice = voice_id if voice_id and _EDGE_VOICE_RE.match(voice_id) else None
+    eleven_voice_id = None if edge_voice else voice_id
 
     # ── ElevenLabs-primary languages (ELEVENLABS_PRIMARY_LANGUAGES) ──
     if language in settings.elevenlabs_primary_set:
@@ -250,7 +273,7 @@ async def synthesize(
 
     # ── 1. Edge-TTS is the primary provider for every other language ──
     try:
-        return await _synthesize_edge(language, tts_text, speed)
+        return await _synthesize_edge(language, tts_text, speed, edge_voice)
     except Exception as exc:
         if not settings.elevenlabs_api_key:
             raise RuntimeError(f"TTS failed for {language}: {exc}")
@@ -259,22 +282,24 @@ async def synthesize(
     # ── 2. ElevenLabs chain ── (key presence already guaranteed above: the
     # edge-failure handler raises when the key is missing)
     try:
-        return await _synthesize_eleven(tts_text, language, voice_id)
+        return await _synthesize_eleven(tts_text, language, eleven_voice_id)
     except Exception as exc:
         # ── 3. Edge-TTS retried once more before giving up ──
         logger.info("TTS falling back to edge-tts for {}", language)
         try:
-            return await _synthesize_edge(language, tts_text, speed)
+            return await _synthesize_edge(language, tts_text, speed, edge_voice)
         except Exception:
             raise RuntimeError(f"TTS failed for {language}: {exc}") from exc
 
 
 def voice_options(language: str) -> list[dict]:
-    """Voice list for /api/voices (no live calls). Edge-tts voice for
-    every language, EXCEPT languages in ELEVENLABS_PRIMARY_LANGUAGES —
-    those report their ElevenLabs voice (provider "elevenlabs"). en-US
-    is the edge fallback voice for unknown codes."""
+    """Voice list for /api/voices (no live calls). English exposes the
+    accent × gender picker (v13, British male default); every other
+    language reports its single default edge-tts voice (or the ElevenLabs
+    voice for ELEVENLABS_PRIMARY_LANGUAGES)."""
     settings = get_settings()
+    if language == "en":
+        return list(EN_VOICE_OPTIONS)
     if language in settings.elevenlabs_primary_set:
         voice_id = DEFAULT_VOICES.get(language, FALLBACK_ELEVEN_VOICE)
         name = VOICE_NAMES.get(voice_id, voice_id)

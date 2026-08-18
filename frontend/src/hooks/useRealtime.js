@@ -78,11 +78,11 @@ function makeWav(pcmBytes, sampleRate) {
   return buf;
 }
 
-export default function useRealtime({ lang, level, scenarioId, native, profile }) {
+export default function useRealtime({ lang, level, scenarioId, native, profile, voice }) {
   // Params are fixed for a mounted screen; the ref keeps the engine
   // closures (created once) reading the latest values regardless.
-  const paramsRef = useRef({ lang, level, scenarioId, native, profile });
-  paramsRef.current = { lang, level, scenarioId, native, profile };
+  const paramsRef = useRef({ lang, level, scenarioId, native, profile, voice });
+  paramsRef.current = { lang, level, scenarioId, native, profile, voice };
 
   // ── React state (rendered by the screen) ──
   const [mode, setModeState] = useState(() => localStorage.getItem('vtalk-mode') || 'ptt');
@@ -485,6 +485,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile }
         native: p.native,
         cont: contRef.current,
         profile: p.profile,
+        voice: p.voice,
       });
       isGuestRef.current = !getToken();
       turnRegistryRef.current = new Map();  // server turn numbering restarts per connection

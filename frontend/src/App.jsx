@@ -8,7 +8,7 @@ import HistoryScreen from './components/HistoryScreen';
 import ProgressScreen from './components/ProgressScreen';
 import ToastStack from './components/ToastStack';
 import {
-  initChat, streamChat, regenerateTTS, getLanguages, getScenarios, getMe, logout as apiLogout,
+  initChat, streamChat, regenerateTTS, getLanguages, getScenarios, getVoices, getMe, logout as apiLogout,
 } from './api';
 import STATIC_LANGUAGES from './i18n/languages';
 import { useT } from './i18n/useI18n';
@@ -69,6 +69,9 @@ export default function App() {
   const [level, setLevel] = useState('beginner');
   const [scenario, setScenario] = useState(null); // null = free talk
   const [profile, setProfile] = useState(loadProfile); // v13: interests + style
+  const [voices, setVoices] = useState([]);
+  // v13 voice picker: British male default (user-directed 2026-08-18)
+  const [voiceId, setVoiceId] = useState('en-GB-RyanNeural');
 
   // Data
   const [languages, setLanguages] = useState(STATIC_TARGET_LANGUAGES);
@@ -121,6 +124,26 @@ export default function App() {
     localStorage.setItem('lf_profile', JSON.stringify(profile));
   }, [profile]);
 
+  // ── Voices (v13): fetch per debate language; default = first option of
+  // the provider the session kind uses (edge for cascade, realtime for WS).
+  useEffect(() => {
+    if (!targetLang) return;
+    let cancelled = false;
+    getVoices(targetLang.code)
+      .then((list) => {
+        if (cancelled || !Array.isArray(list)) return;
+        setVoices(list);
+        const usable = list.filter((v) =>
+          targetLang.realtime ? v.provider === 'realtime' : v.provider !== 'realtime'
+        );
+        if (usable.length && !usable.some((v) => v.voice_id === voiceId)) {
+          setVoiceId(usable[0].voice_id);
+        }
+      })
+      .catch((e) => console.error('getVoices failed:', e));
+    return () => { cancelled = true; };
+  }, [targetLang?.code]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Toast timeout cleanup ──
   useEffect(() => {
     return () => {
@@ -150,6 +173,7 @@ export default function App() {
         level: lvl,
         scenarioId: scenarioObj?.id || '',
         profile: prof,
+        voiceId,
       });
       setSessionId(res.session_id);
       const g = res.greeting || {};
@@ -169,7 +193,7 @@ export default function App() {
       notify('chat.error_init');
       setScreen('setup');
     }
-  }, [profile, nativeLang, notify]);
+  }, [profile, nativeLang, voiceId, notify]);
 
   const sendChat = useCallback(async ({ blob, text }) => {
     if (!sessionId || !targetLang || sendingRef.current) return;
@@ -326,6 +350,9 @@ export default function App() {
           level={level}
           profile={profile}
           onProfileChange={setProfile}
+          voices={voices}
+          voiceId={voiceId}
+          onVoiceSelect={setVoiceId}
           user={user}
           onLogin={() => setAuthMode('login')}
           onLogout={handleLogout}
@@ -353,6 +380,7 @@ export default function App() {
           scenario={scenario}
           nativeLang={nativeLang}
           profile={profile}
+          voice={voiceId}
           onEndSession={endSession}
           onLoginRequest={() => setAuthMode('register')}
         />

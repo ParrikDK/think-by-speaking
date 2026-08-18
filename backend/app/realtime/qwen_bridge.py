@@ -86,19 +86,20 @@ def build_session_update(
     continuation: bool = False,
     asr_model: str = "gummy-realtime-v1",
     profile: dict | None = None,
+    voice: str | None = None,
 ) -> dict:
     """session.update payload. Field names per the qwen3.5-omni realtime docs.
 
     ptt: turn_detection null disables VAD — the client drives turns with
     input_audio_buffer.commit + response.create. handsfree: semantic_vad
     (recommended for the qwen3.5-omni-realtime series) with level-based
-    silence patience.
-    """
+    silence patience. `voice` overrides the per-language preset when the
+    learner picked a voice in setup (v13)."""
     return {
         "type": "session.update",
         "session": {
             "modalities": ["text", "audio"],
-            "voice": voice_for(lang),
+            "voice": voice or voice_for(lang),
             "input_audio_format": "pcm",
             "output_audio_format": "pcm",
             # Enables user-speech transcription (separate display ASR
@@ -196,6 +197,7 @@ async def run_bridge(
     quota_remaining_seconds: float,
     continuation: bool = False,
     profile: dict | None = None,
+    voice: str | None = None,
 ) -> None:
     """Run one realtime session until either side drops. Never raises.
     `continuation` (v11 M2) tells the persona this is a session-cap
@@ -237,6 +239,7 @@ async def run_bridge(
         lang, level, mode, native_language, scenario_prompt, continuation,
         asr_model=settings.realtime_asr_model,
         profile=profile,
+        voice=voice,
     )))
     logger.info(
         "REALTIME SESSION start id={} lang={} level={} mode={} native={} user={}",

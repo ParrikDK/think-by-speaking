@@ -133,7 +133,7 @@ export async function getMe() {
  * guest trial on the server). `cont` marks a session-cap rollover
  * reconnect (server skips the greeting).
  */
-export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont, profile }) {
+export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont, profile, voice }) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const params = new URLSearchParams({ lang, level, mode });
   if (scenarioId) params.set('scenario_id', scenarioId);
@@ -141,6 +141,7 @@ export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont, pro
   if (profile && Object.keys(profile).length > 0) {
     params.set('profile', JSON.stringify(profile)); // URLSearchParams encodes
   }
+  if (voice) params.set('voice', voice);
   const token = getToken();
   if (token) params.set('token', token);
   if (cont) params.set('cont', '1');

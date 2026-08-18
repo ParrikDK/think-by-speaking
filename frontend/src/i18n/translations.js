@@ -1319,6 +1319,10 @@ const extra = {
     "grammar.well_done": "Strong point!",
     "grammar.correction": "Coach's rebuttal",
 
+    // Coach voice (v13)
+    "voice.title": "Coach voice?",
+    "voice.desc": "Your coach's voice — accent and gender.",
+
     // Learner profile (v13 — the personalization moat)
     "profile.title": "Your profile",
     "profile.desc": "The coach personalizes every debate to you — your interests, your style.",
