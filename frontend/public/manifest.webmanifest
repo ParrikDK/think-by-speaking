@@ -1,7 +1,7 @@
 {
-  "name": "Speak, Don't Just Read",
-  "short_name": "Speak",
-  "description": "Voice-first AI language tutor",
+  "name": "Debate Tutor",
+  "short_name": "Debate Tutor",
+  "description": "Voice-first debate coach — think by speaking",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

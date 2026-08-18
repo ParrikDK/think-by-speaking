@@ -33,6 +33,7 @@ async def create_session(
     scenario_id: str | None,
     voice_id: str,
     user: User | None,
+    profile: dict | None = None,
 ) -> SessionData:
     """Register the realtime session like a cascade session: in-memory via
     session_store (flushed to SQLite by the write-behind loop), plus the
@@ -45,6 +46,7 @@ async def create_session(
             scenario_id=scenario_id,
             voice_id=voice_id,
             user_id=user.id if user else "",
+            profile=profile,
         )
     )
     if user:

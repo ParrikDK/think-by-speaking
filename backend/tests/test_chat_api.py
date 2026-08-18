@@ -8,10 +8,13 @@ from app.prompts.tutor import silence_message
 FAKE_PAYLOAD = {
     "reply": "Bonjour ! Comment ça va ?",
     "translation": "Hello! How are you?",
-    "grammar": {
-        "is_correct": False,
-        "corrected_text": "Je suis bien.",
-        "explanation": "Use 'suis' with 'je'.",
+    "feedback": {
+        "stance": "partially_agree",
+        "score": 55,
+        "score_delta": 5,
+        "counter": "Close — you said it right.",
+        "evidence": "The verb follows je.",
+        "next": "How would you answer?",
     },
 }
 
@@ -92,7 +95,7 @@ def test_text_chat_turn_skips_stt(client, mock_services, monkeypatch):
     assert body["user_text"] == "Je suis bien"
     reply = body["reply"]
     assert reply["text"] == FAKE_PAYLOAD["reply"]
-    assert reply["grammar"]["is_correct"] is False
+    assert reply["feedback"]["stance"] == "partially_agree"
     assert mock_services["stt"] == 0  # typed text → no STT call
 
 
@@ -109,7 +112,7 @@ def test_empty_audio_returns_localized_silence(client, mock_services):
     body = r.json()
     assert body["user_text"] == ""
     assert body["reply"]["text"] == silence_message("en")
-    assert body["reply"]["grammar"] is None
+    assert body["reply"]["feedback"] is None
     assert body["reply"]["audio_base64"] == "QUJD"
     assert mock_services["stt"] == 1
 
@@ -196,7 +199,7 @@ def test_chinese_reply_not_romanized(client, mock_services, monkeypatch):
         return {
             "reply": "你好！你叫什么名字？",
             "translation": "Hello! What is your name?",
-            "grammar": None,
+            "feedback": None,
         }
 
     monkeypatch.setattr("app.services.llm.chat_json", zh_payload)
@@ -207,24 +210,28 @@ def test_chinese_reply_not_romanized(client, mock_services, monkeypatch):
 
 
 @pytest.mark.parametrize("level", ["beginner", "intermediate", "fluent"])
-def test_grammar_correction_raw_for_all_levels(client, mock_services, monkeypatch, level):
-    """corrected_text stays raw at every level — no server-side romanization."""
-    async def zh_payload_with_grammar(messages, language="zh", native_language="en"):
+def test_feedback_card_raw_for_all_levels(client, mock_services, monkeypatch, level):
+    """The debate card fields flow through raw at every level (v13)."""
+    async def zh_payload_with_feedback(messages, language="zh", native_language="en"):
         return {
             "reply": "试着说：你好！",
             "translation": "Try saying: Hello!",
-            "grammar": {
-                "is_correct": False,
-                "corrected_text": "你好",
-                "explanation": "Use 你 for 'you'.",
+            "feedback": {
+                "stance": "partially_agree",
+                "score": 55,
+                "score_delta": 5,
+                "counter": "Partly — 你好 works for one person.",
+                "evidence": "Mandarin uses 您 for respect.",
+                "next": "When would you use 您?",
             },
         }
 
-    monkeypatch.setattr("app.services.llm.chat_json", zh_payload_with_grammar)
+    monkeypatch.setattr("app.services.llm.chat_json", zh_payload_with_feedback)
     body = _init(client, language="zh", level=level)
-    grammar = body["greeting"]["grammar"]
-    assert grammar is not None
-    assert grammar["corrected_text"] == "你好"
+    feedback = body["greeting"]["feedback"]
+    assert feedback is not None
+    assert feedback["score"] == 55
+    assert feedback["stance"] == "partially_agree"
 
 
 def test_llm_history_contains_raw_reply(client, mock_services, monkeypatch):
@@ -235,7 +242,7 @@ def test_llm_history_contains_raw_reply(client, mock_services, monkeypatch):
         return {
             "reply": "你好！你叫什么名字？",
             "translation": "Hello! What is your name?",
-            "grammar": None,
+            "feedback": None,
         }
 
     monkeypatch.setattr("app.services.llm.chat_json", zh_payload)
@@ -405,7 +412,7 @@ def test_nudge_retry_uses_corrected_reply(client, mock_services, monkeypatch):
     once (cheap reply-only call) and the corrected English reply wins."""
     async def cjk_reply(messages, language="fr", native_language="en"):
         return {"reply": "你可以話「我今日好開心」。", "translation": "",
-                "grammar": None}
+                "feedback": None}
 
     async def english_nudge(messages, language="fr"):
         assert "IMPORTANT: answer in the SAME language" in messages[-1]["content"]
@@ -429,7 +436,7 @@ def test_nudge_retry_not_called_when_reply_matches(client, mock_services, monkey
     async def english_reply(messages, language="fr", native_language="en"):
         calls["n"] += 1
         return {"reply": "You can say 我今日好開心.", "translation": "",
-                "grammar": None}
+                "feedback": None}
 
     async def fast_reply(messages, language="fr"):
         calls["fast"] += 1
@@ -451,7 +458,7 @@ def test_stream_nudge_retry_uses_corrected_reply(client, mock_services, monkeypa
     """The stream path also nudge-retries a mismatched reply."""
     async def cjk_stream(messages, language="fr", native_language="en"):
         yield {"reply": "你可以話「我今日好開心」。", "translation": "",
-               "grammar": None}
+               "feedback": None}
 
     async def english_nudge(messages, language="fr"):
         return "You can say 我今日好開心 — very happy today."
@@ -477,7 +484,7 @@ def test_nudge_not_fired_by_translation_drift(client, mock_services, monkeypatch
 
     async def chinese_then_english(messages, language="fr", native_language="en"):
         return {"reply": "Great job! 早晨 means good morning.",
-                "translation": "做得好！", "grammar": None}
+                "translation": "做得好！", "feedback": None}
 
     async def english_nudge(messages, language="fr"):
         calls["fast"] += 1
@@ -505,7 +512,7 @@ def test_nudge_strips_typed_prefix_in_retry_check(client, mock_services, monkeyp
     calls = {"fast": 0}
 
     async def english_reply(messages, language="fr", native_language="en"):
-        return {"reply": "Great to hear that!", "translation": "", "grammar": None}
+        return {"reply": "Great to hear that!", "translation": "", "feedback": None}
 
     async def english_nudge(messages, language="fr"):
         calls["fast"] += 1
@@ -556,7 +563,7 @@ class TestJyutpingStripped:
         from app.routers.chat import _build_turn
         import asyncio
         payload = {"reply": "唔該 (m4 goi1) means thank you", "translation": "Thanks",
-                   "grammar": None}
+                   "feedback": None}
         turn = asyncio.run(_build_turn(payload, "yue", "", "intermediate", skip_audio=True))
         assert "m4 goi1" not in turn.text
         assert "唔該" in turn.text

@@ -20,14 +20,13 @@ from ..db.user_store import User
 from ..models.schemas import (
     ChatInitResponse,
     ChatResponse,
-    Grammar,
+    DebateFeedback,
     TurnPayload,
 )
 from ..prompts import get_scenario
 from ..prompts.tutor import VALID_LEVELS, build_messages, silence_message
 from ..routers.languages import SUPPORTED_LANGUAGES
 from ..services import llm, stt, tts
-from ..services.romanize import romanize
 from .auth import get_optional_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -58,6 +57,20 @@ def _normalize_scenario(scenario_id: Optional[str]) -> Optional[str]:
         return None
     scenario_id = scenario_id.strip()
     return scenario_id if get_scenario(scenario_id) else None
+
+
+def _parse_profile(raw: Optional[str]) -> Optional[dict]:
+    """Parse the learner profile JSON from the form/query. Oversized or
+    malformed profiles are dropped — never fail a session over a profile."""
+    if not raw or not raw.strip():
+        return None
+    if len(raw) > 4096:
+        raise HTTPException(422, "Profile too large")
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
 
 
 # Compiled once at import — matches the _MD_PATTERNS idiom in services/llm.py.
@@ -178,37 +191,28 @@ async def _build_turn(
 ) -> TurnPayload:
     """LLM payload dict → TurnPayload (raw text + optional TTS audio).
 
-    The reply field contains native language characters (e.g. 你好) which
-    TTS reads correctly — the text is passed through as-is with no
-    romanization. Stored messages therefore flow back to the LLM clean.
+    v13: the contract's grammar object is now the debate feedback card
+    ({stance, score, score_delta, counter, evidence, next}).
     TTS uses Edge-TTS (primary provider for every language).
 
     With skip_audio=True no TTS call is made — the streaming endpoint
     delivers audio on a separate SSE "audio" event after "complete".
     """
     raw_reply = _strip_jyutping(payload["reply"])
-    grammar = payload.get("grammar")
+    feedback = payload.get("feedback")
     audio_b64 = ""
     if not skip_audio:
         try:
-            # TTS receives the native-language text (characters only — the LLM
-            # contract forbids romanization in the reply). Edge-TTS is primary.
+            # TTS receives the reply text as-is (the LLM contract keeps it
+            # pure natural language). Edge-TTS is primary.
             audio_b64 = await tts.synthesize(raw_reply, language, voice_id or None, level)
         except Exception as exc:
             logger.error("TTS failed: {} — returning turn without audio", exc)
-    # v10 (2026-08-06): the LLM's translation now flows through instead of
-    # being blanked server-side — beginner personas still return "" by
-    # prompt design (their reply is already in the native language), while
-    # intermediate/fluent translations reach the UI and history.
     translation = payload.get("translation") or ""
-    pronunciation = romanize(raw_reply, language)
-    if grammar and grammar.get("corrected_text"):
-        grammar["pronunciation"] = romanize(grammar["corrected_text"], language)
     return TurnPayload(
         text=raw_reply,
         translation=translation,
-        pronunciation=pronunciation,
-        grammar=Grammar(**grammar) if grammar else None,
+        feedback=DebateFeedback(**feedback) if feedback else None,
         audio_base64=audio_b64,
     )
 
@@ -221,7 +225,7 @@ async def _silence_turn(language: str, native_language: str, voice_id: str, leve
     """
     msg_lang = native_language if level == "beginner" else language
     return await _build_turn(
-        {"reply": silence_message(msg_lang), "translation": "", "grammar": None},
+        {"reply": silence_message(msg_lang), "translation": "", "feedback": None},
         language,
         voice_id,
         level,
@@ -233,31 +237,33 @@ def _history_for_llm(session: SessionData) -> list[dict]:
 
 
 def _enrichment_context(session: SessionData) -> str:
-    """Build a short context string of recent corrections.
+    """Build a short context string of recent debate feedback.
 
-    Injected into the system prompt so the LLM remembers what it just taught
-    instead of starting fresh each turn.
+    Injected into the system prompt so the LLM keeps the running score and
+    doesn't repeat rebuttals it already scored.
     """
-    corrections = []
+    points = []
+    score = None
 
-    # Walk messages in reverse — most recent corrections first
+    # Walk messages in reverse — most recent feedback first
     for m in reversed(session.messages):
         if m.get("role") != "assistant":
             continue
-        grammar = m.get("grammar")
-        if grammar and not grammar.get("is_correct", True):
-            corrected = grammar.get("corrected_text", "")
-            explanation = grammar.get("explanation", "")
-            if corrected or explanation:
-                corrections.append(f"Corrected: \"{corrected}\" — {explanation}" if explanation else f"Corrected: \"{corrected}\"")
-
-        # Collect up to 3 corrections
-        if len(corrections) >= 3:
+        feedback = m.get("grammar") or m.get("feedback")
+        if isinstance(feedback, dict):
+            if score is None and isinstance(feedback.get("score"), int):
+                score = feedback.get("score")
+            counter = feedback.get("counter", "")
+            evidence = feedback.get("evidence", "")
+            if counter or evidence:
+                points.append(f"Counter: \"{counter}\"" + (f" — Evidence: \"{evidence}\"" if evidence else ""))
+        if len(points) >= 2:
             break
 
-    if not corrections:
+    if not points and score is None:
         return ""
-    return "Recent corrections:\n- " + "\n- ".join(reversed(corrections))
+    head = f"Recent debate: score {score}." if score is not None else "Recent debate:"
+    return head + "\n- " + "\n- ".join(reversed(points))
 
 
 async def _persist_auth_turn(session: SessionData, new_messages: int) -> None:
@@ -294,6 +300,7 @@ async def chat_init(
     level: str = Form(...),
     scenario_id: Optional[str] = Form(None),
     voice_id: Optional[str] = Form(None),
+    profile: Optional[str] = Form(None),
     user: Optional[User] = Depends(get_optional_user),
 ):
     _validate_language(language)
@@ -301,6 +308,7 @@ async def chat_init(
     if native_language not in SUPPORTED_LANGUAGES:
         native_language = "en"
     scenario = _normalize_scenario(scenario_id)
+    profile_data = _parse_profile(profile)
 
     session = session_store.create(
         SessionData(
@@ -310,6 +318,7 @@ async def chat_init(
             scenario_id=scenario,
             voice_id=voice_id or "",
             user_id=user.id if user else "",
+            profile=profile_data,
         )
     )
     if user:
@@ -318,6 +327,7 @@ async def chat_init(
     messages = build_messages(
         language, level, [], "",
         native_language=native_language, scenario_id=scenario, is_init=True,
+        profile=profile_data,
     )
     payload = await llm.chat_json(messages, language, native_language=session.native_language)
     turn = await _build_turn(payload, language, session.voice_id, level)
@@ -366,12 +376,12 @@ async def chat_turn(
     session.add_message("user", user_text)
     session.add_message(
         "assistant", turn.text, translation=turn.translation,
-        grammar=turn.grammar.model_dump() if turn.grammar else None,
+        grammar=turn.feedback.model_dump() if turn.feedback else None,
     )
     await _persist_auth_turn(session, 2)
 
     error_type = "tts_failure" if not turn.audio_base64 else None
-    return ChatResponse(session_id=session_id, user_text=user_text, user_pronunciation=romanize(user_text, language), reply=turn, error_type=error_type)
+    return ChatResponse(session_id=session_id, user_text=user_text, user_pronunciation="", reply=turn, error_type=error_type)
 
 
 # ── POST /api/chat/tts (regenerate audio for a failed turn) ──────────
@@ -466,7 +476,7 @@ async def chat_turn_stream(
         session.add_message("user", user_text)
         session.add_message(
             "assistant", turn.text, translation=turn.translation,
-            grammar=turn.grammar.model_dump() if turn.grammar else None,
+            grammar=turn.feedback.model_dump() if turn.feedback else None,
         )
         await _persist_auth_turn(session, 2)
 

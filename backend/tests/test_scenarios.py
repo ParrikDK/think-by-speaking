@@ -1,12 +1,13 @@
 """Scenario catalog: YAML files load with all required fields.
 
-User-directed 2026-08-03: "At the Doctor" → "Appointment"; "At Work" added.
+v13: scenarios repurposed as debate subjects (general interest, user-directed:
+"just generally a debate person, so that I think by speaking").
 """
 from app.prompts import REQUIRED_FIELDS, get_scenario, load_scenarios, scenario_summaries
 
 EXPECTED_IDS = {
-    "restaurant", "airport", "hotel", "shopping",
-    "appointment", "taxi-directions", "job-interview", "small-talk", "at-work",
+    "social-media", "ai-future", "remote-work", "money-happiness",
+    "school-start", "free-will", "zoos", "gaming", "voting",
 }
 
 
@@ -16,12 +17,11 @@ def test_all_scenarios_load():
     assert {s["id"] for s in scenarios} == EXPECTED_IDS
 
 
-def test_scenario_order_leads_with_at_work_small_talk():
-    """User-directed 2026-08-04: At Work + Small Talk lead the picker;
-    the remainder stays alphabetical by id (Free talk is a frontend chip
-    rendered before the list)."""
+def test_scenario_order_leads_with_social_media_ai_future():
+    """DISPLAY_FIRST: Social Media + AI lead the picker; the remainder stays
+    alphabetical by id (Free talk is a frontend chip rendered first)."""
     ids = [s["id"] for s in load_scenarios()]
-    assert ids[:2] == ["at-work", "small-talk"]
+    assert ids[:2] == ["social-media", "ai-future"]
     assert ids[2:] == sorted(ids[2:])
 
 
@@ -38,7 +38,7 @@ def test_summaries_hide_prompt():
 
 
 def test_get_scenario():
-    assert get_scenario("restaurant")["title"] == "At the Restaurant"
+    assert get_scenario("social-media")["title"] == "Is Social Media Bad for Society?"
     assert get_scenario("nope") is None
 
 

@@ -4,23 +4,25 @@ import LANGUAGES from '../i18n/languages';
 
 const LEVELS = ['beginner', 'intermediate', 'fluent'];
 
-// Pinned languages shown in a "Popular" optgroup at the top of the
-// learning-language dropdown (user-directed 2026-08-03): Mandarin,
-// Cantonese, English. The native language has no dropdown — it is
-// implicitly the interaction (UI) language (v12.1 design).
+// v13: the debate language dropdown (was: learning language). Pinned
+// languages shown in a "Popular" optgroup: Mandarin, Cantonese, English.
+// The native language has no dropdown — it is implicitly the interaction
+// (UI) language (v12.1 design).
 const POPULAR_LEARN = ['zh', 'yue', 'en'];
 
-const ENGLISH_ACCENTS = {
-  american: '🇺🇸 American',
-  british: '🇬🇧 British',
-  australian: '🇦🇺 Australian',
-};
+// v13: the learner profile — the personalization moat. Interests shape the
+// coach's examples and subject suggestions; style shapes how hard it pushes.
+const INTERESTS = ['tech', 'health', 'money', 'society', 'education', 'sports', 'politics', 'arts'];
+const STYLES = ['devils_advocate', 'socratic', 'encouraging'];
+
+function toggleIn(list, item) {
+  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+}
 
 /**
- * Single-page onboarding (spec §3.6): native language, learning language,
- * difficulty — and optional scenario — all on the first page. v8B visual
- * language (grid + chips + level pills). The CTA starts the chat via
- * onStart({langObj, lvl, scenarioObj}) (the existing startChat).
+ * Single-page onboarding: debate language, depth — and optional subject and
+ * profile — all on the first page. The CTA starts the debate via
+ * onStart({langObj, lvl, scenarioObj, profile}) (the existing startChat).
  */
 function LangOptions({ t, pinnedCodes }) {
   const pinned = pinnedCodes.map((c) => LANGUAGES.find((l) => l.code === c)).filter(Boolean);
@@ -43,21 +45,22 @@ function LangOptions({ t, pinnedCodes }) {
 
 export default function SetupScreen({
   lang, uiLang, onUiLangChange, languages, scenarios,
-  targetLang, level, accent, user,
+  targetLang, level, profile, user,
   onLogin, onLogout, onProgress, onStart,
-  onTargetSelect, onLevelSelect, onAccentChange,
+  onTargetSelect, onLevelSelect, onProfileChange,
 }) {
   const t = useT(lang);
   const [scenarioId, setScenarioId] = useState('');
-  const isEnglish = targetLang?.code === 'en';
   // Native language is optional — defaults to English in startChat (the old
   // wizard's "skip" behavior).
   const ready = targetLang && level;
+  const interests = profile?.interests || [];
+  const style = profile?.style || '';
 
   const begin = () => {
     if (!ready) return;
     const scenarioObj = scenarios.find((s) => s.id === scenarioId) || null;
-    onStart({ langObj: targetLang, lvl: level, scenarioObj });
+    onStart({ langObj: targetLang, lvl: level, scenarioObj, profile });
   };
 
   return (
@@ -99,7 +102,7 @@ export default function SetupScreen({
             (UI) language — the tutor explains in whatever language the
             interface runs in (v12.1 design, dropdown removed 2026-08-17). */}
 
-        {/* Learning language — dropdown */}
+        {/* Debate language — dropdown */}
         <section className="setup-section">
           <h2 className="setup-title">{t('lang.title')}</h2>
           <select
@@ -115,7 +118,7 @@ export default function SetupScreen({
           </select>
         </section>
 
-        {/* Difficulty */}
+        {/* Debate depth */}
         <section className="setup-section">
           <h2 className="setup-title">{t('level.title')}</h2>
           <div className="setup-chips">
@@ -129,26 +132,10 @@ export default function SetupScreen({
               </button>
             ))}
           </div>
-          {isEnglish && (
-            <div style={{ marginTop: 16 }}>
-              <label className="field-label">{t('accent.label')}</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {Object.entries(ENGLISH_ACCENTS).map(([key, label]) => (
-                  <button
-                    key={key}
-                    className={`setup-chip ${accent === key ? 'setup-chip-active' : ''}`}
-                    onClick={() => onAccentChange(key)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
 
-        {/* Optional scenario — dropdown (10 options; >4 → dropdown per
-            user-directed 2026-08-16 rule) */}
+        {/* Optional subject — dropdown (10 options incl. free debate; >4 →
+            dropdown per user-directed 2026-08-16 rule) */}
         {scenarios.length > 0 && (
           <section className="setup-section">
             <h2 className="setup-title">{t('scenario.pick_title')}</h2>
@@ -164,6 +151,45 @@ export default function SetupScreen({
             </select>
           </section>
         )}
+
+        {/* Learner profile — the personalization moat (v13). Never blocks
+            the CTA; skip keeps whatever profile is already stored. */}
+        <section className="setup-section">
+          <h2 className="setup-title">{t('profile.title')}</h2>
+          <p className="setup-hint">{t('profile.desc')}</p>
+
+          <label className="field-label">{t('profile.interests')}</label>
+          <div className="setup-chips">
+            {INTERESTS.map((key) => (
+              <button
+                key={key}
+                className={`setup-chip ${interests.includes(key) ? 'setup-chip-active' : ''}`}
+                onClick={() =>
+                  onProfileChange({ ...(profile || {}), interests: toggleIn(interests, key) })
+                }
+              >
+                {t('profile.interest.' + key)}
+              </button>
+            ))}
+          </div>
+
+          <label className="field-label" style={{ marginTop: 14 }}>{t('profile.style')}</label>
+          <div className="setup-chips">
+            {STYLES.map((key) => (
+              <button
+                key={key}
+                className={`setup-chip ${style === key ? 'setup-chip-active' : ''}`}
+                onClick={() => onProfileChange({ ...(profile || {}), style: style === key ? '' : key })}
+              >
+                {t('profile.style.' + key)}
+              </button>
+            ))}
+          </div>
+
+          <button className="btn btn-ghost btn-sm setup-skip" onClick={() => onProfileChange({})}>
+            {t('profile.skip')}
+          </button>
+        </section>
 
         <button className="btn btn-primary setup-cta" disabled={!ready} onClick={begin}>
           {t('welcome.cta')}

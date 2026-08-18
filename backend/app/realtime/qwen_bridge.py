@@ -3,8 +3,8 @@
 v11 M1 (2026-08-08). Port of the live-tested spike
 (spike/qwen-realtime/server.py) onto app infrastructure: settings from
 app.config, loguru logging, services.romanize imported normally (no
-sys.path hacks), turn state in realtime.turns.TurnTracker, grammar cards
-via services.grammar, and usage_audio quota metering.
+sys.path hacks), turn state in realtime.turns.TurnTracker, debate
+feedback cards via services.grammar, and usage_audio quota metering.
 
 Protocol reference (verified 2026-08-06):
   - https://docs.qwencloud.com/developer-guides/speech/realtime-multimodal-speech
@@ -85,6 +85,7 @@ def build_session_update(
     scenario_prompt: str | None = None,
     continuation: bool = False,
     asr_model: str = "gummy-realtime-v1",
+    profile: dict | None = None,
 ) -> dict:
     """session.update payload. Field names per the qwen3.5-omni realtime docs.
 
@@ -111,7 +112,7 @@ def build_session_update(
                 }
             ),
             "instructions": build_instructions(
-                lang, level, native_language, scenario_prompt, continuation
+                lang, level, native_language, scenario_prompt, continuation, profile
             ),
         },
     }
@@ -194,6 +195,7 @@ async def run_bridge(
     client_ip: str,
     quota_remaining_seconds: float,
     continuation: bool = False,
+    profile: dict | None = None,
 ) -> None:
     """Run one realtime session until either side drops. Never raises.
     `continuation` (v11 M2) tells the persona this is a session-cap
@@ -234,6 +236,7 @@ async def run_bridge(
     await upstream.send(json.dumps(build_session_update(
         lang, level, mode, native_language, scenario_prompt, continuation,
         asr_model=settings.realtime_asr_model,
+        profile=profile,
     )))
     logger.info(
         "REALTIME SESSION start id={} lang={} level={} mode={} native={} user={}",
@@ -273,39 +276,49 @@ async def run_bridge(
             pass
         await browser.close(code=meter.close_code, reason=kind)
 
-    async def grammar_card(turn: int, user_text: str, tutor_text: str):
-        """Fire the DeepSeek check; on success send proxy.grammar.
+    async def feedback_card(turn: int, user_text: str, tutor_text: str):
+        """Fire the DeepSeek judge; on success send proxy.feedback.
         Any failure is logged and skipped — never breaks the session."""
-        result = await grammar.check(lang, level, native_language, user_text, tutor_text)
+        history_text = "\n".join(
+            f"{m['role']}: {m['text']}"
+            for m in session.messages[-6:]
+            if m.get("text")
+        )
+        result = await grammar.check(
+            lang, level, native_language, user_text, tutor_text, history_text
+        )
         if result is None:
             return
         try:
             await browser.send_text(json.dumps({
-                "type": "proxy.grammar",
+                "type": "proxy.feedback",
                 "turn": turn,
                 **result,
             }))
-            logger.info("REALTIME GRAMMAR turn={} is_correct={}", turn, result["is_correct"])
+            logger.info(
+                "REALTIME FEEDBACK turn={} stance={} score={}",
+                turn, result["stance"], result["score"],
+            )
         except Exception:
             pass  # browser already gone — the card is best-effort
 
-    def maybe_fire_grammar(turn: int):
-        """Fire the check once both halves of a turn exist: the user
+    def maybe_fire_feedback(turn: int):
+        """Fire the judge once both halves of a turn exist: the user
         transcript and a non-cancelled response.done for that turn."""
         rec = tracker.records.get(turn)
         if not rec or rec.grammar_sent or not rec.response_done or not rec.user:
             return
         rec.grammar_sent = True
-        task = asyncio.create_task(grammar_card(turn, rec.user, rec.tutor))
+        task = asyncio.create_task(feedback_card(turn, rec.user, rec.tutor))
         state["bg"].add(task)
         task.add_done_callback(state["bg"].discard)
 
     async def after_turn_event(turn: int):
-        """Persist + grammar-check a turn as soon as it completes."""
+        """Persist + feedback-check a turn as soon as it completes."""
         if turn <= 0:
             return
         await tracker.persist_turn(turn)
-        maybe_fire_grammar(turn)
+        maybe_fire_feedback(turn)
 
     async def browser_to_upstream():
         """Mic PCM16 chunks -> input_audio_buffer.append; text cmds passthrough."""

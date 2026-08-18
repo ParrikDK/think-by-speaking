@@ -1,4 +1,4 @@
-"""Speak, Don't Just Read v8 — FastAPI application factory.
+"""Debate Tutor — FastAPI application factory (v13).
 
 Middleware: CORS (env ALLOWED_ORIGINS), security headers, request-id +
 access log, in-memory 60 req/min/IP rate limit. Serves the built frontend
@@ -51,7 +51,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
-    logger.info("Starting Speak, Don't Just Read v{}", __version__)
+    logger.info("Starting Debate Tutor v{}", __version__)
     warn_on_retired_models(settings)
     await init_db()
     session_store.start()
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
-        title="Speak, Don't Just Read",
+        title="Debate Tutor",
         version=__version__,
         lifespan=lifespan,
         docs_url=None if settings.environment == "production" else "/docs",

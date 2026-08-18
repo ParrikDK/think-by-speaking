@@ -78,11 +78,11 @@ function makeWav(pcmBytes, sampleRate) {
   return buf;
 }
 
-export default function useRealtime({ lang, level, scenarioId, native }) {
+export default function useRealtime({ lang, level, scenarioId, native, profile }) {
   // Params are fixed for a mounted screen; the ref keeps the engine
   // closures (created once) reading the latest values regardless.
-  const paramsRef = useRef({ lang, level, scenarioId, native });
-  paramsRef.current = { lang, level, scenarioId, native };
+  const paramsRef = useRef({ lang, level, scenarioId, native, profile });
+  paramsRef.current = { lang, level, scenarioId, native, profile };
 
   // ── React state (rendered by the screen) ──
   const [mode, setModeState] = useState(() => localStorage.getItem('vtalk-mode') || 'ptt');
@@ -179,8 +179,8 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
         role: 'user',
         text: ev.transcript_unclear ? '' : text,
         unclear: !!ev.transcript_unclear,
-        romanization: ev.transcript_unclear ? null : (ev.romanization || null),
-        grammar: null,
+        romanization: null,
+        feedback: null,
         turn: ev.turn ?? null,
       };
       registerTurn(ev.turn, 'userId', id);
@@ -403,15 +403,19 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
           renderUserTranscript(ev);
           break;
 
-        // Async grammar card for a finished turn: attach to that turn's user bubble.
-        case 'proxy.grammar': {
+        // Async debate feedback card for a finished turn (v13): attach to
+        // that turn's user bubble.
+        case 'proxy.feedback': {
           const rec = turnRegistryRef.current.get(ev.turn);
           if (rec && rec.userId != null) {
             updateMessage(rec.userId, {
-              grammar: {
-                is_correct: !!ev.is_correct,
-                corrected_text: ev.corrected_text || '',
-                explanation: ev.explanation || '',
+              feedback: {
+                stance: ev.stance || 'partially_agree',
+                score: Number(ev.score) || 50,
+                score_delta: Number(ev.score_delta) || 0,
+                counter: ev.counter || '',
+                evidence: ev.evidence || '',
+                next: ev.next || '',
               },
             });
           }
@@ -479,6 +483,7 @@ export default function useRealtime({ lang, level, scenarioId, native }) {
         scenarioId: p.scenarioId,
         native: p.native,
         cont: contRef.current,
+        profile: p.profile,
       });
       isGuestRef.current = !getToken();
       turnRegistryRef.current = new Map();  // server turn numbering restarts per connection

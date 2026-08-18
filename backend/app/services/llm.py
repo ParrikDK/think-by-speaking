@@ -109,26 +109,30 @@ def extract_json(raw: str) -> dict:
 
 
 def normalize_payload(parsed: dict) -> dict:
-    """Coerce a parsed LLM dict into the contract's reply shape."""
+    """Coerce a parsed LLM dict into the contract's reply shape (v13:
+    the grammar object became the debate feedback card)."""
     reply = str(parsed.get("reply") or parsed.get("text") or "").strip()
     if not reply:
         raise ValueError("LLM payload has empty reply")
     translation = str(parsed.get("translation") or "").strip()
 
-    grammar = parsed.get("grammar")
-    if not isinstance(grammar, dict):
-        grammar = None
+    feedback = parsed.get("feedback")
+    if not isinstance(feedback, dict):
+        feedback = None
     else:
-        grammar = {
-            "is_correct": bool(grammar.get("is_correct", True)),
-            "corrected_text": str(grammar.get("corrected_text") or ""),
-            "explanation": str(grammar.get("explanation") or ""),
+        feedback = {
+            "stance": str(feedback.get("stance") or "partially_agree"),
+            "score": int(feedback.get("score") or 50),
+            "score_delta": int(feedback.get("score_delta") or 0),
+            "counter": str(feedback.get("counter") or ""),
+            "evidence": str(feedback.get("evidence") or ""),
+            "next": str(feedback.get("next") or ""),
         }
 
     return {
         "reply": reply,
         "translation": translation,
-        "grammar": grammar,
+        "feedback": feedback,
     }
 
 
@@ -140,7 +144,7 @@ def fallback_payload(language: str) -> dict:
     return {
         "reply": error_message(language),
         "translation": "",
-        "grammar": None,
+        "feedback": None,
     }
 
 
@@ -221,7 +225,7 @@ async def _complete_once(messages: list[dict], language: str = "en", native_lang
         # the extra translation-enrichment call was deleted with the move
         # to json_object mode (contract violations are now rare).
         logger.warning("LLM returned non-JSON text ({} chars) — salvaging as reply", len(content))
-        return {"reply": strip_markdown(content), "translation": "", "grammar": None}
+        return {"reply": strip_markdown(content), "translation": "", "feedback": None}
 
 
 async def chat_json(messages: list[dict], language: str = "en", native_language: str = "en") -> dict:
@@ -358,7 +362,7 @@ async def chat_json_stream(
         text = buffer.strip()
         if len(text) > emitted_len:
             yield text[emitted_len:]
-        final = {"reply": strip_markdown(text), "translation": "", "grammar": None}
+        final = {"reply": strip_markdown(text), "translation": "", "feedback": None}
     if final is None:
         final = fallback_payload(language)
         # Ensure the streamed text matches what the complete event will carry:

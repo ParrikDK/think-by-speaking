@@ -774,6 +774,89 @@ input, textarea, select {
   border-top: 1px dashed rgba(27, 36, 48, 0.12);
 }
 
+/* ── Debate feedback card (v13) — same palette language as .grammar-card ── */
+.debate-card {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--color-voice-light);
+  border-left: 3px solid var(--color-voice);
+  box-shadow: 0 1px 3px rgba(47, 111, 94, 0.12);
+}
+
+.debate-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.debate-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.debate-score-num {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-voice-dark);
+}
+
+.debate-delta {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.debate-delta-up { color: var(--color-voice-dark); }
+.debate-delta-down { color: var(--color-pen); }
+.debate-delta-flat { color: var(--color-ink-muted); }
+
+.debate-stance {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.debate-stance-agree { color: var(--color-voice-dark); }
+.debate-stance-partially_agree { color: var(--color-gold-dark, #8a6d1d); }
+.debate-stance-disagree { color: var(--color-pen); }
+
+.debate-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  margin-top: 6px;
+  border-top: 1px dashed rgba(27, 36, 48, 0.12);
+}
+
+.debate-label {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.debate-text {
+  color: var(--color-ink);
+  font-size: 12.5px;
+}
+
+.debate-row-next .debate-text {
+  font-style: italic;
+}
+
 .audio-controls {
   display: flex;
   gap: 6px;
@@ -1037,61 +1120,6 @@ input, textarea, select {
 .scenario-banner-title {
   font-weight: 600;
   color: var(--color-voice-dark);
-}
-
-/* ── Welcome / landing ──────────────────────────── */
-
-.hero {
-  text-align: center;
-  padding: clamp(28px, 6vh, 64px) clamp(16px, 4vw, 32px) clamp(28px, 5vh, 48px);
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.hero-wordmark {
-  font-family: var(--font-display);
-  font-size: clamp(32px, 4.8vw, 66px);  /* sized so "Speak, Don't Just Read" fits one line */
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  color: var(--color-ink);
-  margin: 0 0 14px;
-}
-
-.hero-greeting {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: clamp(24px, 4.5vw, 38px);
-  font-weight: 500;
-  line-height: 1.25;
-  color: var(--color-voice-dark);
-  min-height: 1.4em;
-  margin: 0 0 16px;
-}
-
-.greeting-rotator {
-  display: inline-block;
-  animation: greeting-in 0.5s var(--ease-out);
-}
-
-.hero-sub {
-  font-size: 15.5px;
-  line-height: 1.65;
-  color: var(--color-ink-muted);
-  max-width: 500px;
-  margin: 0 auto 30px;
-}
-
-.hero-cta-row {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.hero-cta-row .btn-primary {
-  padding: 15px 34px;
-  font-size: 16px;
 }
 
 /* feature cards: staggered, individually tinted (bento diversity) */

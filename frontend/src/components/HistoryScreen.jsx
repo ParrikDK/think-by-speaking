@@ -53,23 +53,27 @@ export default function HistoryScreen({ lang, user, languages, scenarios, onResu
     setLoadingMsgs(true);
     try {
       const data = await getSessionMessages(sessionId);
-      // Pair grammar (carried on assistant replies) onto the preceding user message
+      // Pair the debate feedback (stored on assistant replies under the
+      // legacy "grammar" key) onto the preceding user message
       const raw = Array.isArray(data.messages) ? data.messages : [];
       const mapped = [];
       for (const m of raw) {
         const isUser = m.role === 'user';
+        const card = m.grammar && typeof m.grammar === 'object' && 'stance' in m.grammar
+          ? m.grammar
+          : null;
         mapped.push({
           id: mapped.length + 1,
           role: isUser ? 'user' : 'tutor',
           text: m.text || '',
           translation: m.translation || null,
-          grammar: isUser ? (m.grammar || null) : null,
+          feedback: isUser ? (m.feedback || card || null) : null,
           audio: null,
         });
-        if (!isUser && m.grammar && mapped.length >= 2) {
+        if (!isUser && card && mapped.length >= 2) {
           const prev = mapped[mapped.length - 2];
-          if (prev.role === 'user' && !prev.grammar) {
-            mapped[mapped.length - 2] = { ...prev, grammar: m.grammar };
+          if (prev.role === 'user' && !prev.feedback) {
+            mapped[mapped.length - 2] = { ...prev, feedback: card };
           }
         }
       }

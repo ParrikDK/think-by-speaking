@@ -181,10 +181,11 @@ def test_session_update_ptt_cantonese(client, fake_upstream):
     sess = update["session"]
     assert sess["voice"] == "Kiki"
     assert sess["turn_detection"] is None  # ptt → VAD off, client drives turns
-    assert sess["input_audio_transcription"] == {"model": "qwen3-asr-flash-realtime"}
+    assert sess["input_audio_transcription"]["model"] == get_settings().realtime_asr_model
     assert "廣東話" in sess["instructions"]
-    assert "jyutping" in sess["instructions"]
-    assert "whose native language is English" in sess["instructions"]
+    assert "debate coach" in sess["instructions"]
+    assert "jyutping" not in sess["instructions"]
+    assert "their native language is English" in sess["instructions"]
 
 
 @pytest.mark.parametrize("level,silence", [("beginner", 1600), ("intermediate", 1100), ("fluent", 700)])
@@ -212,15 +213,15 @@ def test_session_update_voice_per_language(client, fake_upstream, lang, voice):
 def test_session_update_scenario_and_native_language(client, fake_upstream):
     from app.prompts import get_scenario
 
-    prompt = get_scenario("restaurant")["prompt"]
+    prompt = get_scenario("ai-future")["prompt"]
     with client.websocket_connect(
-        ws_url(lang="fr", level="beginner", mode="ptt", scenario_id="restaurant", native="es")
+        ws_url(lang="fr", level="beginner", mode="ptt", scenario_id="ai-future", native="es")
     ) as ws:
         update = fake_upstream.wait_for("session.update")
     instructions = update["session"]["instructions"]
-    assert "SCENARIO" in instructions and prompt in instructions
+    assert "SUBJECT — debate this claim:" in instructions and prompt in instructions
     # Native language generalized (the spike hardcoded English).
-    assert "whose native language is Spanish" in instructions
+    assert "their native language is Spanish" in instructions
     assert "natural French words and Spanish" in instructions
 
 
@@ -228,7 +229,7 @@ def test_continuation_hint_on_rollover_reconnect(client, fake_upstream):
     """cont=1 (session-cap rollover, v11 M2) adds a skip-the-greeting hint."""
     with client.websocket_connect(ws_url()) as ws:
         update = fake_upstream.wait_for("session.update")
-    assert "continues an ongoing practice conversation" not in update["session"]["instructions"]
+    assert "continues an ongoing debate" not in update["session"]["instructions"]
     seen = len(fake_upstream.events("session.update"))
     with client.websocket_connect(ws_url(cont="1")) as ws:
         # Wait for THIS connection's session.update (wait_for would otherwise
@@ -239,7 +240,7 @@ def test_continuation_hint_on_rollover_reconnect(client, fake_upstream):
             assert time.time() < deadline, "second session.update never arrived"
             time.sleep(0.01)
         update = fake_upstream.events("session.update")[-1]
-    assert "continues an ongoing practice conversation" in update["session"]["instructions"]
+    assert "continues an ongoing debate" in update["session"]["instructions"]
 
 
 # ── (b) ptt command forwarding ────────────────────────────────────────
@@ -324,21 +325,21 @@ def test_registered_user_session_counts_stats(client, fake_upstream):
     assert stats["total_messages"] == 2  # user + assistant rows of the turn
 
 
-# ── (d) guest over trial ──────────────────────────────────────────────
+# ── (d) quota disabled (v12.2 personal deploy) ─────────────────────────
+# The daily-quota enforcement (4001) is deliberately dead code — guests and
+# users share the upstream session cap (4000 rollover). These tests pin the
+# disabled behavior so a future re-enable has to touch them deliberately.
 
-def test_guest_over_trial_gets_4001(client, fake_upstream, monkeypatch):
+def test_guest_with_exhausted_quota_still_connects(client, fake_upstream, monkeypatch):
+    """Even with seconds_used_today reporting 9999, the connection proceeds:
+    the accept-time quota check is commented out (v12.2)."""
     async def over_quota(user_id="", ip="", day=None):
         return 9999
 
     monkeypatch.setattr("app.db.usage_store.seconds_used_today", over_quota)
-    with pytest.raises(WebSocketDisconnect) as excinfo:
-        with client.websocket_connect(ws_url()) as ws:
-            event = next_message(ws)[1]
-            assert event["type"] == "error"
-            assert event["error"]["code"] == "quota_exhausted"
-            next_message(ws)  # close follows the error event
-    assert excinfo.value.code == 4001
-    assert fake_upstream.events("session.update") == []  # never reached upstream
+    with client.websocket_connect(ws_url()) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert update["session"]["modalities"] == ["text", "audio"]  # reached upstream
 
 
 # ── (e) transcript guards + romanization ──────────────────────────────
@@ -376,26 +377,28 @@ def test_cjk_transcript_gets_romanization_and_turn(client, fake_upstream):
     assert "nǐ" in tutor["romanization"]
 
 
-# ── (f) grammar card on turn completion ───────────────────────────────
+# ── (f) debate feedback card on turn completion ───────────────────────
 
-def test_grammar_card_fires_on_completed_turn(client, fake_upstream, monkeypatch):
+def test_feedback_card_fires_on_completed_turn(client, fake_upstream, monkeypatch):
     calls = []
 
-    async def fake_check(lang, level, native_language, user_text, tutor_text=""):
+    async def fake_check(lang, level, native_language, user_text, tutor_text="", history_text=""):
         calls.append({"lang": lang, "level": level, "native": native_language,
                       "user": user_text, "tutor": tutor_text})
-        return {"is_correct": False, "corrected_text": "我今日好開心",
-                "explanation": "Word order."}
+        return {"stance": "disagree", "score": 42, "score_delta": -8,
+                "counter": "That claim needs evidence.",
+                "evidence": "Correlation is not causation.",
+                "next": "What would falsify it?"}
 
     monkeypatch.setattr("app.services.grammar.check", fake_check)
     with client.websocket_connect(ws_url(lang="yue", level="intermediate")) as ws:
         fake_upstream.wait_for("session.update")
         ptt_turn(ws)
-        events = collect_until(ws, lambda e: e.get("type") == "proxy.grammar")
-    card = next(e for e in events if e["type"] == "proxy.grammar")
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
+    card = next(e for e in events if e["type"] == "proxy.feedback")
     assert card["turn"] == 1
-    assert card["is_correct"] is False
-    assert card["corrected_text"] == "我今日好開心"
+    assert card["stance"] == "disagree"
+    assert card["score"] == 42
     assert calls == [{"lang": "yue", "level": "intermediate", "native": "en",
                       "user": "你好", "tutor": REPLY_TEXT}]
 
@@ -405,7 +408,8 @@ def test_grammar_not_fired_for_cancelled_turn(client, fake_upstream, monkeypatch
 
     async def fake_check(*args, **kwargs):
         calls.append(args)
-        return {"is_correct": True, "corrected_text": "", "explanation": ""}
+        return {"stance": "partially_agree", "score": 50, "score_delta": 0,
+                "counter": "", "evidence": "", "next": ""}
 
     monkeypatch.setattr("app.services.grammar.check", fake_check)
     fake_upstream.auto_done = False
@@ -415,8 +419,8 @@ def test_grammar_not_fired_for_cancelled_turn(client, fake_upstream, monkeypatch
         collect_until(ws, lambda e: e.get("type") == "response.created")
         ws.send_text(json.dumps({"type": "response.cancel"}))
         collect_until(ws, lambda e: e.get("type") == "response.done")
-        time.sleep(0.3)  # a buggy grammar task would have fired by now
-    # A cancelled response.done never completes the turn → no grammar task.
+        time.sleep(0.3)  # a buggy feedback task would have fired by now
+    # A cancelled response.done never completes the turn → no feedback task.
     assert calls == []
 
 
@@ -439,11 +443,12 @@ def test_rollover_close_4000_when_audio_cap_hit(client, fake_upstream, monkeypat
     assert any(e.get("type") == "proxy.session_cap" for e in events)
 
 
-def test_guest_quota_close_is_4001_when_trial_below_cap(client, fake_upstream, monkeypatch):
-    """Trial smaller than the session cap → the mid-session close is the
-    quota code, not the rollover code."""
+def test_trial_below_cap_still_closes_4000_session_cap(client, fake_upstream, monkeypatch):
+    """The trial setting no longer affects the close code — the session cap
+    (4000 rollover) is the only limiter (v12.2)."""
     settings = get_settings()
     monkeypatch.setattr(settings, "realtime_guest_trial_seconds", 1)
+    monkeypatch.setattr(settings, "realtime_max_audio_seconds", 1)  # session cap 1 s
 
     async def no_prior_usage(user_id="", ip="", day=None):
         return 0  # isolate from other tests' usage flushes
@@ -458,8 +463,9 @@ def test_guest_quota_close_is_4001_when_trial_below_cap(client, fake_upstream, m
                 kind, payload = next_message(ws, kinds=("json", "bytes"))
                 if kind == "json":
                     events.append(payload)
-    assert excinfo.value.code == 4001
-    assert any(e.get("type") == "proxy.quota_exhausted" for e in events)
+    assert excinfo.value.code == 4000
+    assert any(e.get("type") == "proxy.session_cap" for e in events)
+    assert not any(e.get("type") == "proxy.quota_exhausted" for e in events)
 
 
 # ── (h) unsupported language ──────────────────────────────────────────

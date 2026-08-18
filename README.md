@@ -1,9 +1,15 @@
-# Speak, Don't Just Read
+# Debate Tutor — think by speaking
 
-Voice-first AI language tutor. Speak with an AI tutor in 31 languages — real-time
-speech-to-text, a level-aware tutor persona, grammar correction, and natural
-text-to-speech replies.
-Hands-free mode with on-device voice-activity detection. Typed input works too.
+A voice-first AI **debate coach**. Pick a subject ("Is social media bad for
+society?", "Will AI take our jobs?", or any topic you bring), then argue
+back and forth with a coach that pushes back with evidence, teaches the
+thinking inside every rebuttal, and scores your debate — personalized to
+your interests and debate style.
+
+**The problem:** you think best by debating out loud, but nobody argues
+back. Social media blocks you, echo chambers agree with you, and generic
+advice doesn't know you. **The fix:** a coach that knows your interests
+and always has to answer.
 
 **Stack:** FastAPI + SQLite (aiosqlite) · React 18 + Vite · DeepSeek (LLM) ·
 ElevenLabs (STT · primary TTS for Cantonese/Mandarin) · Edge-TTS (primary TTS for all other languages) ·
@@ -19,7 +25,7 @@ Prereqs: Python 3.12+, Node 20+.
 # 1. Backend — configure keys
 cd backend
 cp .env.example .env          # then fill in your keys
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
@@ -33,14 +39,14 @@ npm run dev                   # http://localhost:5173 (proxies /api → :8000)
 
 ```bash
 cd frontend && npm install && npm run build   # builds into backend/app/static
-cd ../backend && source .venv/bin/activate
+cd ../backend && source venv/bin/activate
 uvicorn app.main:app --port 8000              # http://localhost:8000
 ```
 
 ## Tests
 
 ```bash
-cd backend && source .venv/bin/activate
+cd backend && source venv/bin/activate
 python -m pytest              # unit + API tests (external services mocked)
 ```
 
@@ -50,16 +56,15 @@ python -m pytest              # unit + API tests (external services mocked)
 |---|---|
 | `ELEVENLABS_API_KEY` | Speech-to-text (Scribe v2) + TTS (primary for Cantonese/Mandarin, fallback otherwise) |
 | `ELEVENLABS_PRIMARY_LANGUAGES` | Comma-separated languages that use ElevenLabs TTS first (default empty = Edge-TTS everywhere) |
-| `DEEPSEEK_API_KEY` | Tutor LLM (OpenAI-compatible API) |
-| `DEEPSEEK_MODEL` | Optional, default `deepseek-v4-pro` (tutor turns) |
-| `DEEPSEEK_MODEL_FAST` | Optional, default `deepseek-v4-flash` (cheap internal calls, e.g. nudge retry) |
+| `DEEPSEEK_API_KEY` | Debate coach LLM (OpenAI-compatible API) |
+| `DEEPSEEK_MODEL` | Optional, default `deepseek-v4-pro` (coach turns) |
+| `DEEPSEEK_MODEL_FAST` | Optional, default `deepseek-v4-flash` (cheap internal calls, e.g. feedback card) |
 | `DASHSCOPE_API_KEY` | **Required for hands-free mode** — Qwen realtime speech-to-speech bridge; without it `/api/realtime/ws` errors |
-| `REALTIME_*` | Realtime quota knobs (guest trial seconds, daily minutes, concurrent sessions per IP) — see `.env.example` |
 | `ALLOWED_ORIGINS` | CORS origins, comma-separated |
 
 See `backend/.env.example` for the full list.
 
-## Deploy (when ready — not required now)
+## Deploy (when ready)
 
 Everything needed is in `deploy/`:
 
@@ -73,11 +78,11 @@ volume under Docker.
 
 ## Features
 
-- 🎙️ Voice conversation loop: speak → STT → tutor → TTS reply with translation
-- ⌨️ Typed input mode — text chat with the same tutor
-- 🗣️ Hands-free mode: on-device Silero VAD auto-detects end of speech, barge-in support — runs on the Qwen realtime speech-to-speech bridge (26 of the 31 languages; the rest fall back to the cascade engine)
-- 📚 9 role-play scenarios (restaurant, airport, hotel, shopping, taxi-directions, job interview, small talk, appointment, at work) + free talk
-- 📈 Grammar correction with explanations, woven into every reply
+- ⚔️ **Debate mode**: pick a subject (9 starter subjects + free debate) and argue with a coach that challenges your claims
+- 📈 **Debate scoring**: every turn earns a score card — stance, counter-argument, one piece of evidence, next challenge
+- 🎯 **Personalized to you**: your interests and debate style (devil's advocate / Socratic / encouraging) shape every session — the coach's examples, stakes, and challenges bend toward you
+- 🗣️ **Voice-first**: speak your arguments — real-time speech-to-text, natural voice replies, replay at 0.5× / 1× / 2×
+- 🎙️ **Hands-free mode**: on-device Silero VAD auto-detects end of speech, barge-in support — runs on the Qwen realtime speech-to-speech bridge (26 of the 31 languages; the rest fall back to the cascade engine)
+- ⌨️ **Typed input mode** — text chat with the same coach
 - 👤 Optional accounts: session history, resume, progress dashboard, streaks
-- 🌍 UI translated into 28 languages
-- ⏯️ Replay tutor audio at 0.5× / 1× / 2×
+- 🌍 31 debate languages, UI translated into 28 languages

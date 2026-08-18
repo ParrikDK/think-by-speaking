@@ -13,17 +13,23 @@ import {
 import STATIC_LANGUAGES from './i18n/languages';
 import { useT } from './i18n/useI18n';
 
-const ENGLISH_ACCENT_VOICES = {
-  american: 'iP95p4xoKVk53GoZ742B',
-  british: 'pFZP5JQG7iQjIQuC4Bku',
-  australian: 'IKne3meq5aSn9XLyUdCD',
-};
-
 const STATIC_TARGET_LANGUAGES = STATIC_LANGUAGES.map((l) => ({
   code: l.code,
   name: l.english,
   native_name: l.native,
 }));
+
+// v13: learner profile (interests + debate style) persisted on-device and
+// sent with every session — the personalization moat.
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem('lf_profile');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function normalizeLanguage(l) {
   return {
@@ -61,8 +67,8 @@ export default function App() {
   // v12.1: default level so "Start learning" is enabled right after
   // choosing a language (the greyed-out CTA was a dead end).
   const [level, setLevel] = useState('beginner');
-  const [accent, setAccent] = useState(() => localStorage.getItem('lf_accent') || 'american');
   const [scenario, setScenario] = useState(null); // null = free talk
+  const [profile, setProfile] = useState(loadProfile); // v13: interests + style
 
   // Data
   const [languages, setLanguages] = useState(STATIC_TARGET_LANGUAGES);
@@ -110,10 +116,10 @@ export default function App() {
     if (l) setNativeLang({ code: l.code, name: l.english, native_name: l.native });
   }, [uiLang]);
 
-  // Persist accent preference across sessions
+  // Persist the learner profile across sessions
   useEffect(() => {
-    localStorage.setItem('lf_accent', accent);
-  }, [accent]);
+    localStorage.setItem('lf_profile', JSON.stringify(profile));
+  }, [profile]);
 
   // ── Toast timeout cleanup ──
   useEffect(() => {
@@ -124,11 +130,13 @@ export default function App() {
   }, []);
 
   // ── Chat lifecycle ──
-  const startChat = useCallback(async ({ langObj, lvl, scenarioObj }) => {
+  const startChat = useCallback(async ({ langObj, lvl, scenarioObj, profile: p }) => {
+    const prof = p && Object.keys(p).length ? p : profile;
     startTransition(() => {
       setTargetLang(langObj);
       setLevel(lvl);
       setScenario(scenarioObj || null);
+      if (prof && Object.keys(prof).length) setProfile(prof);
       // Realtime-capable languages (v11 M2) go straight to the WS voice
       // screen — no initChat; the session starts on the first mic tap or
       // typed line. Everything else stays on the cascade engine below.
@@ -136,13 +144,12 @@ export default function App() {
     });
     if (langObj.realtime) return;
     try {
-      const voiceId = langObj.code === 'en' ? ENGLISH_ACCENT_VOICES[accent] : undefined;
       const res = await initChat({
         language: langObj.code,
         nativeLanguage: nativeLang?.code || 'en',
         level: lvl,
         scenarioId: scenarioObj?.id || '',
-        voiceId,
+        profile: prof,
       });
       setSessionId(res.session_id);
       const g = res.greeting || {};
@@ -152,7 +159,7 @@ export default function App() {
         role: 'tutor',
         text: g.text || '',
         translation: g.translation || null,
-        grammar: null,
+        feedback: null,
         audio: g.audio_base64 || null,
         streaming: false,
       }]);
@@ -162,7 +169,7 @@ export default function App() {
       notify('chat.error_init');
       setScreen('setup');
     }
-  }, [accent, nativeLang, notify]);
+  }, [profile, nativeLang, notify]);
 
   const sendChat = useCallback(async ({ blob, text }) => {
     if (!sessionId || !targetLang || sendingRef.current) return;
@@ -175,7 +182,7 @@ export default function App() {
 
     setMessages((prev) => [
       ...prev,
-      { id: userId, role: 'user', text: isTyped ? text : '', pending: !isTyped, grammar: null },
+      { id: userId, role: 'user', text: isTyped ? text : '', pending: !isTyped, feedback: null },
       { id: tutorId, role: 'tutor', text: '', streaming: true },
     ]);
 
@@ -210,7 +217,7 @@ export default function App() {
             text: userText,
             pending: false,
             noSpeech: !isTyped && userText === '',
-            grammar: userText ? (reply.grammar || null) : null,
+            feedback: userText ? (reply.feedback || null) : null,
             error_type: errorType,
           };
         }
@@ -220,7 +227,7 @@ export default function App() {
             role: 'tutor',
             text: reply.text || streamed,
             translation: reply.translation || null,
-            grammar: null,
+            feedback: null,
             // "complete" never carries audio (skip_audio) — preserve whatever
             // the onAudio event attached earlier.
             audio: reply.audio_base64 || m.audio || null,
@@ -317,7 +324,8 @@ export default function App() {
           scenarios={scenarios}
           targetLang={targetLang}
           level={level}
-          accent={accent}
+          profile={profile}
+          onProfileChange={setProfile}
           user={user}
           onLogin={() => setAuthMode('login')}
           onLogout={handleLogout}
@@ -327,11 +335,11 @@ export default function App() {
             // API's realtime flag by code (v11 M2 routing).
             const fromApi = languages.find((x) => x.code === l.code);
             setTargetLang({ code: l.code, name: l.english, native_name: l.native, realtime: !!fromApi?.realtime });
-            setAccent('american');
           }}
           onLevelSelect={setLevel}
-          onAccentChange={setAccent}
-          onStart={({ langObj, lvl, scenarioObj }) => startChat({ langObj, lvl, scenarioObj })}
+          onStart={({ langObj, lvl, scenarioObj, profile: p }) =>
+            startChat({ langObj, lvl, scenarioObj, profile: p })
+          }
         />
       )}
 
@@ -344,6 +352,7 @@ export default function App() {
           level={level}
           scenario={scenario}
           nativeLang={nativeLang}
+          profile={profile}
           onEndSession={endSession}
           onLoginRequest={() => setAuthMode('register')}
         />

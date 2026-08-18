@@ -12,9 +12,10 @@ session-cap rollover reconnect: the persona is told to skip the greeting
 and continue the conversation naturally. The bridge itself lives in
 app/realtime/qwen_bridge.py.
 """
+import json
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, HTTPException
 from loguru import logger
 
 from ..config import get_settings
@@ -35,6 +36,20 @@ router = APIRouter(prefix="/realtime", tags=["realtime"])
 _active_by_ip: dict[str, int] = {}
 
 
+def _parse_profile(raw: Optional[str]) -> Optional[dict]:
+    """Parse the learner profile JSON from the WS query. Oversized or
+    malformed profiles are dropped — never fail a session over a profile."""
+    if not raw or not raw.strip():
+        return None
+    if len(raw) > 4096:
+        raise HTTPException(422, "Profile too large")
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
 @router.websocket("/ws")
 async def realtime_ws(
     websocket: WebSocket,
@@ -45,6 +60,7 @@ async def realtime_ws(
     native: str = "en",
     token: Optional[str] = None,
     cont: Optional[str] = None,
+    profile: Optional[str] = None,
 ):
     await websocket.accept()
     settings = get_settings()
@@ -138,9 +154,10 @@ async def realtime_ws(
     #     await websocket.close(code=4001)
     #     return
     user_id = user.id if user else ""
+    profile_data = _parse_profile(profile)
 
     session = await create_session(
-        lang, level, native, scenario, voice_for(lang), user
+        lang, level, native, scenario, voice_for(lang), user, profile_data
     )
 
     _active_by_ip[client_ip] = _active_by_ip.get(client_ip, 0) + 1
@@ -155,6 +172,7 @@ async def realtime_ws(
             session=session,
             user_id=user_id,
             client_ip=client_ip,
+            profile=profile_data,
             # Quota disabled (see above) — the bridge ignores this value.
             quota_remaining_seconds=float(settings.realtime_max_audio_seconds),
             continuation=bool(cont),

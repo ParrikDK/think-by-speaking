@@ -1,68 +1,12 @@
-import { useState } from 'react';
 import Waveform from './Waveform';
+import DebateCard from './DebateCard';
 import { useT } from '../i18n/useI18n';
-
-// ── Word-level diff for grammar strike/insert rendering ──
-// Tokenize into CJK chars (no spaces), Latin word-runs (incl. contractions
-// like "l'amour") and whitespace — so a Latin word never gets diffed
-// character-by-character against a similar word in the correction.
-const CJK_RE = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
-
-function tokenize(s) {
-  return s.match(/[぀-ヿ㐀-䶿一-鿿가-힯]|[A-Za-z0-9'()]+|\s+/g) || [];
-}
-
-function diffTokens(a, b) {
-  const m = a.length;
-  const n = b.length;
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-  for (let i = m - 1; i >= 0; i--) {
-    for (let j = n - 1; j >= 0; j--) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const segs = [];
-  let i = 0;
-  let j = 0;
-  let mode = null;
-  let buf = '';
-  const flush = () => {
-    if (buf) segs.push({ type: mode, text: buf });
-    buf = '';
-  };
-  const push = (nextMode, ch) => {
-    if (mode !== nextMode) { flush(); mode = nextMode; }
-    buf += ch;
-  };
-  while (i < m && j < n) {
-    if (a[i] === b[j]) { push('same', a[i]); i++; j++; }
-    else if (dp[i + 1][j] >= dp[i][j + 1]) { push('strike', a[i]); i++; }
-    else { push('insert', b[j]); j++; }
-  }
-  while (i < m) push('strike', a[i++]);
-  while (j < n) push('insert', b[j++]);
-  flush();
-  return segs;
-}
-
-function DiffText({ original, corrected }) {
-  const segs = diffTokens(tokenize(original || ''), tokenize(corrected || ''));
-  return (
-    <span>
-      {segs.map((seg, i) => {
-        if (seg.type === 'strike') return <span key={i} className="diff-strike">{seg.text}</span>;
-        if (seg.type === 'insert') return <span key={i} className="diff-insert">{seg.text}</span>;
-        return <span key={i}>{seg.text}</span>;
-      })}
-    </span>
-  );
-}
 
 const SPEEDS = [0.7, 1, 1.5];
 
 /**
  * @param {object}   props
- * @param {object}   props.msg               - Message object (id, role, text, translation, grammar, audio, streaming, pending, noSpeech, error_type, interrupted)
+ * @param {object}   props.msg               - Message object (id, role, text, feedback, audio, streaming, pending, noSpeech, error_type, interrupted)
  * @param {string}   props.lang              - User's UI language code
  * @param {(rate: number) => void} props.onPlay - Play audio at given speed
  * @param {() => void} props.onStop          - Stop audio playback
@@ -74,9 +18,8 @@ const SPEEDS = [0.7, 1, 1.5];
 export default function MessageBubble({ msg, lang, onPlay, onStop, isPlaying = false, speed = 1, onSpeedChange, onRegenerateAudio }) {
   const t = useT(lang);
   const isTutor = msg.role === 'tutor';
-  const [showTranslation, setShowTranslation] = useState(true);
 
-  const grammar = msg.grammar || null;
+  const feedback = msg.feedback || null;
 
   return (
     <div className={isTutor ? 'msg msg-tutor' : 'msg msg-user'}>
@@ -112,45 +55,11 @@ export default function MessageBubble({ msg, lang, onPlay, onStop, isPlaying = f
           )}
         </div>
 
-        {/* Pronunciation (pinyin/jyutping) below every message */}
-        {msg.pronunciation && !msg.streaming && (
-          <div className="msg-pronunciation">{msg.pronunciation}</div>
-        )}
-
-        {/* Translation (native language) — same placement as the
-            pronunciation line, with a show/hide toggle */}
-        {msg.translation && !msg.streaming && (
-          <>
-            <button
-              type="button"
-              className="msg-translation-toggle"
-              onClick={() => setShowTranslation((v) => !v)}
-            >
-              {showTranslation
-                ? t('chat.hide_translation', 'Hide translation')
-                : t('chat.show_translation', 'Show translation')}
-            </button>
-            {showTranslation && <div className="msg-translation">{msg.translation}</div>}
-          </>
-        )}
       </div>
 
-      {/* Grammar card (attached to user messages) */}
-      {grammar && !msg.pending && !msg.noSpeech && (
-        grammar.is_correct ? (
-          <div className="grammar-card grammar-card-good">
-            <div className="grammar-card-label">✓ {t('grammar.well_done')}</div>
-            {grammar.explanation && <div className="grammar-explanation">{grammar.explanation}</div>}
-          </div>
-        ) : (
-          <div className="grammar-card">
-            <div className="grammar-card-label">✏️ {t('grammar.correction')}</div>
-            <div>
-              <DiffText original={msg.text} corrected={grammar.corrected_text} />
-            </div>
-            {grammar.explanation && <div className="grammar-explanation">{grammar.explanation}</div>}
-          </div>
-        )
+      {/* Debate feedback card (attached to user messages, v13) */}
+      {feedback && !msg.pending && !msg.noSpeech && (
+        <DebateCard feedback={feedback} lang={lang} />
       )}
 
       {/* Audio controls with working speed control */}

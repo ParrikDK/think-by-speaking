@@ -14,7 +14,7 @@ REQUIRED_FIELDS = ("id", "title", "description", "icon", "prompt")
 
 # User-directed 2026-08-04: these ids lead the scenario picker (Free talk
 # is the frontend's always-first default chip); the rest follow by id.
-DISPLAY_FIRST = ("at-work", "small-talk")
+DISPLAY_FIRST = ("social-media", "ai-future")
 
 
 @lru_cache

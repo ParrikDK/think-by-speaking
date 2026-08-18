@@ -89,18 +89,21 @@ class TestNormalizePayload:
         raw = {
             "reply": "Hello!",
             "translation": "你好！",
-            "grammar": {
-                "is_correct": False,
-                "corrected_text": "Hello!",
-                "explanation": "Missing exclamation.",
+            "feedback": {
+                "stance": "disagree",
+                "score": 42,
+                "score_delta": -8,
+                "counter": "Needs evidence.",
+                "evidence": "Correlation ≠ causation.",
+                "next": "What would falsify it?",
             },
         }
         result = normalize_payload(raw)
         assert result["reply"] == "Hello!"
         assert result["translation"] == "你好！"
-        assert result["grammar"]["is_correct"] is False
-        assert result["grammar"]["corrected_text"] == "Hello!"
-        assert result["grammar"]["explanation"] == "Missing exclamation."
+        assert result["feedback"]["stance"] == "disagree"
+        assert result["feedback"]["score"] == 42
+        assert result["feedback"]["score_delta"] == -8
         assert "vocabulary" not in result
 
     def test_missing_fields(self):
@@ -109,8 +112,8 @@ class TestNormalizePayload:
         result = normalize_payload(raw)
         assert result["reply"] == "Hi"
         assert result["translation"] == ""
-        assert result["grammar"] is None
-        assert set(result.keys()) == {"reply", "translation", "grammar"}
+        assert result["feedback"] is None
+        assert set(result.keys()) == {"reply", "translation", "feedback"}
 
     def test_empty_reply_raises(self):
         """Empty reply string → ValueError."""
@@ -127,13 +130,14 @@ class TestNormalizePayload:
         with pytest.raises(ValueError, match="empty reply"):
             normalize_payload({"translation": ""})
 
-    def test_grammar_dict_handling(self):
-        """`grammar` as dict → structured; non-dict → None."""
-        good = normalize_payload({"reply": "a", "grammar": {"is_correct": True, "corrected_text": "a", "explanation": "OK"}})
-        assert good["grammar"] is not None
+    def test_feedback_dict_handling(self):
+        """`feedback` as dict → structured; non-dict → None."""
+        good = normalize_payload({"reply": "a", "feedback": {"stance": "agree", "score": 60}})
+        assert good["feedback"] is not None
+        assert good["feedback"]["stance"] == "agree"
 
-        bad = normalize_payload({"reply": "a", "grammar": "not a dict"})
-        assert bad["grammar"] is None
+        bad = normalize_payload({"reply": "a", "feedback": "not a dict"})
+        assert bad["feedback"] is None
 
     def test_reply_stripped(self):
         """Reply string gets stripped."""
@@ -167,17 +171,17 @@ class TestFallbackPayload:
     def test_all_expected_keys_present(self):
         """Fallback dict has all standard shape keys."""
         result = fallback_payload("en")
-        assert set(result.keys()) == {"reply", "translation", "grammar"}
+        assert set(result.keys()) == {"reply", "translation", "feedback"}
 
     def test_translation_empty(self):
         """Translation is empty string in fallback."""
         result = fallback_payload("en")
         assert result["translation"] == ""
 
-    def test_grammar_none(self):
-        """Grammar is None in fallback."""
+    def test_feedback_none(self):
+        """feedback is None in fallback (v13: grammar object replaced)."""
         result = fallback_payload("en")
-        assert result["grammar"] is None
+        assert result["feedback"] is None
 
     def test_non_english_language(self):
         """Non-English language returns non-empty reply."""
@@ -325,7 +329,7 @@ class TestPlainTextSalvage:
         import asyncio
         result = asyncio.run(_import_chat_json([{"role": "user", "content": "hi"}]))
         assert result["reply"] == "嘩，咁你就有好多機會練習喇！"
-        assert result["grammar"] is None
+        assert result["feedback"] is None
 
     def test_stream_salvages_plain_text(self, monkeypatch):
         from types import SimpleNamespace
@@ -426,7 +430,7 @@ class TestMarkdownStripped:
         async def fake_create(**kwargs):
             return SimpleNamespace(choices=[SimpleNamespace(
                 message=SimpleNamespace(content='{"reply": "**唔該** is used when someone does something", '
-                                                '"translation": "**Thank you**", "grammar": null}')
+                                                '"translation": "**Thank you**", "feedback": null}')
             )])
         fake_client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=fake_create)
@@ -505,7 +509,7 @@ class TestV4RequestParams:
         async def fake_create(**kwargs):
             seen.update(kwargs)
             return SimpleNamespace(choices=[SimpleNamespace(
-                message=SimpleNamespace(content='{"reply": "hi", "translation": "", "grammar": null}')
+                message=SimpleNamespace(content='{"reply": "hi", "translation": "", "feedback": null}')
             )])
         fake_client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=fake_create)
@@ -527,7 +531,7 @@ class TestV4RequestParams:
 
         async def fake_create(**kwargs):
             seen.update(kwargs)
-            return _fake_stream(FakeChunk('{"reply": "hi", "translation": "", "grammar": null}'))
+            return _fake_stream(FakeChunk('{"reply": "hi", "translation": "", "feedback": null}'))
         fake_client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=fake_create)
         ))

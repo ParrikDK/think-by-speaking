@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     level TEXT NOT NULL,
     scenario_id TEXT,
     voice_id TEXT,
+    profile_json TEXT,           -- v13: learner profile {interests, style} for personalization
     started_at TEXT NOT NULL,
     last_active TEXT NOT NULL
 );
@@ -91,6 +92,10 @@ async def init_db(db_path: str | None = None) -> aiosqlite.Connection:
     await _db.executescript(SCHEMA)
     try:
         await _db.execute("ALTER TABLE messages ADD COLUMN pronunciation TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        await _db.execute("ALTER TABLE sessions ADD COLUMN profile_json TEXT")
     except Exception:
         pass
     await _db.commit()

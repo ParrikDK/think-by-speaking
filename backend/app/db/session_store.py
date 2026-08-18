@@ -48,6 +48,7 @@ class SessionData:
     messages: list[dict] = field(default_factory=list)
     persisted_messages: int = 0  # how many messages are already in SQLite
     dirty: bool = True
+    profile: Optional[dict] = None  # v13: learner interests/style for personalization
 
     @property
     def is_guest(self) -> bool:
@@ -159,6 +160,10 @@ class SessionStore:
             voice_id=row["voice_id"] or "",
             started_at=_parse(row["started_at"]),
             last_active=_parse(row["last_active"]),
+            profile=(
+                json.loads(row["profile_json"])
+                if row["profile_json"] else None
+            ),
         )
         async with db.execute(
             "SELECT * FROM messages WHERE session_id = ? ORDER BY seq", (session_id,)
@@ -257,11 +262,13 @@ class SessionStore:
         await db.execute(
             """
             INSERT INTO sessions (id, user_id, language, native_language, level,
-                                  scenario_id, voice_id, started_at, last_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  scenario_id, voice_id, profile_json,
+                                  started_at, last_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 user_id = excluded.user_id,
                 voice_id = excluded.voice_id,
+                profile_json = excluded.profile_json,
                 last_active = excluded.last_active
             """,
             (
@@ -272,6 +279,7 @@ class SessionStore:
                 session.level,
                 session.scenario_id,
                 session.voice_id,
+                json.dumps(session.profile, ensure_ascii=False) if session.profile else None,
                 _iso(session.started_at),
                 _iso(session.last_active),
             ),

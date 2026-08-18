@@ -6,13 +6,13 @@ const MSG_COUNT = 7;
 const TIP_COUNT = 7;
 
 const MISSION_QUOTES = [
-  { text: '"I want to order food in Mandarin."', name: 'Parrik' },
-  { text: '"Job market not easy I heard, knowing Mandarin Cantonese English is advantage like a degree itself."', name: 'P' },
-  { text: '"Online tutors charge like how much? I\'d rather build one…"', name: 'PD' },
-  { text: '"Websites and YouTube are great, but I want the reality of actually speaking practicing."', name: 'PDK' },
-  { text: '"Want to be able practice freely, comfortably. Like late night or even while waiting or commuting."', name: 'P' },
-  { text: '"Online tutors? Nah."', name: 'Parrik' },
-  { text: '"I\'m going to build one!"', name: 'PDK' },
+  { text: '"Everyone\'s a nutrition expert on the internet. I\'d rather debate one that has to answer back."', name: 'P' },
+  { text: '"My cousin swears by keto, the gym bro is all about protein timing, my mom says dairy rots bones… I just want what\'s actually true."', name: 'P' },
+  { text: '"I don\'t want a lecture. I want to argue and find out I\'m wrong on my own terms."', name: 'PD' },
+  { text: '"Generic advice is useless. My life is not a statistics page."', name: 'PDK' },
+  { text: '"Nobody argues back on social media. They just block you."', name: 'P' },
+  { text: '"Debating out loud is how I actually find out what I think."', name: 'Parrik' },
+  { text: '"One coach that knows my interests and always answers back? That\'s worth building."', name: 'PDK' },
 ];
 
 function pickRandom(arr) {

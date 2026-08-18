@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import useRealtime from '../hooks/useRealtime';
+import DebateCard from './DebateCard';
 import { useT } from '../i18n/useI18n';
 import './RealtimeChatScreen.css';
 
@@ -42,7 +43,6 @@ const RtBubble = memo(function RtBubble({ msg, speaking, langTag, t, onReplay })
       ) : (
         <div>{msg.text}</div>
       )}
-      {msg.romanization && <div className="rt-roman">{msg.romanization}</div>}
       {isTutor && speaking && (
         <span className="rt-eq" aria-hidden="true"><i /><i /><i /></span>
       )}
@@ -51,16 +51,14 @@ const RtBubble = memo(function RtBubble({ msg, speaking, langTag, t, onReplay })
           {t('bubble.replay')}
         </button>
       )}
-      {/* Flattened grammar card: full-bleed strip inside the user bubble
-          (2026-08-07 design review — no box-in-box). */}
-      {msg.grammar && (
-        msg.grammar.is_correct ? (
-          <div className="rt-gcard rt-gcard-ok">✓ {t('rt.grammar_ok')}</div>
+      {/* Debate feedback card (v13): full-bleed inside the user bubble
+          (2026-08-07 design review — no box-in-box). When the judge could
+          not extract a claim, show the light ack instead of an empty card. */}
+      {msg.feedback && (
+        msg.feedback.counter || msg.feedback.evidence ? (
+          <DebateCard feedback={msg.feedback} lang={lang} />
         ) : (
-          <div className="rt-gcard">
-            <div lang={langTag}>{msg.grammar.corrected_text}</div>
-            {msg.grammar.explanation && <div className="rt-gexpl">{msg.grammar.explanation}</div>}
-          </div>
+          <div className="rt-gcard rt-gcard-ok">✓ {t('debate.ack', 'Good claim — nothing to rebut.')}</div>
         )
       )}
     </div>
@@ -73,6 +71,7 @@ export default function RealtimeChatScreen({
   level,
   scenario,
   nativeLang,
+  profile,
   onEndSession,
   onLoginRequest,
 }) {
@@ -82,6 +81,7 @@ export default function RealtimeChatScreen({
     level: level || 'beginner',
     scenarioId: scenario?.id || '',
     native: nativeLang?.code || 'en',
+    profile,
   });
   const { mode, pttDown, pttRelease, pttSetCancel } = rt;
 
@@ -94,11 +94,11 @@ export default function RealtimeChatScreen({
   // Auto-scroll to the newest bubble on ANY message-content change. The
   // old length+last-text deps missed content landing on non-last messages
   // (the ASR user bubble is spliced BEFORE the in-flight tutor bubble, and
-  // romanization/grammar cards arrive after the turn) - those grew the
+  // debate feedback cards arrive after the turn) - those grew the
   // list without triggering a scroll. Always pins to bottom, per the user
   // (2026-08-17: "keep it bottom most automatically").
   const msgsSig = rt.messages.map(
-    (m) => `${m.text}|${m.romanization}|${m.grammar}|${m.unclear}`
+    (m) => `${m.text}|${m.feedback ? JSON.stringify(m.feedback) : ''}|${m.unclear}`
   ).join('||');
   useEffect(() => {
     const el = chatRef.current;

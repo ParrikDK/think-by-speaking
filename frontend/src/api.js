@@ -1,4 +1,4 @@
-// Speak, Don't Just Read - v8 API client, implements docs/api-contract.md
+// Debate Tutor - v13 API client, implements docs/api-contract.md
 const API_BASE = '/api';
 
 const TOKEN_KEY = 'lf_token';
@@ -133,11 +133,14 @@ export async function getMe() {
  * guest trial on the server). `cont` marks a session-cap rollover
  * reconnect (server skips the greeting).
  */
-export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont }) {
+export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont, profile }) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const params = new URLSearchParams({ lang, level, mode });
   if (scenarioId) params.set('scenario_id', scenarioId);
   if (native) params.set('native', native);
+  if (profile && Object.keys(profile).length > 0) {
+    params.set('profile', JSON.stringify(profile)); // URLSearchParams encodes
+  }
   const token = getToken();
   if (token) params.set('token', token);
   if (cont) params.set('cont', '1');
@@ -146,13 +149,16 @@ export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont }) {
 
 // ── Chat ─────────────────────────────────────────
 
-export async function initChat({ language, nativeLanguage, level, scenarioId, voiceId }) {
+export async function initChat({ language, nativeLanguage, level, scenarioId, voiceId, profile }) {
   const form = new FormData();
   form.append('language', language);
   form.append('native_language', nativeLanguage || 'en');
   form.append('level', level || 'beginner');
   form.append('scenario_id', scenarioId || ''); // empty string = free talk
   if (voiceId) form.append('voice_id', voiceId);
+  if (profile && Object.keys(profile).length > 0) {
+    form.append('profile', JSON.stringify(profile));
+  }
 
   const res = await fetch(`${API_BASE}/chat/init`, {
     method: 'POST',

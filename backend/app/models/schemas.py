@@ -22,20 +22,24 @@ class AuthResponse(BaseModel):
     user: UserOut
 
 
-# ── Turn payload (the tutor's half of a turn) ───────────────────────
+# ── Turn payload (the coach's half of a turn) ───────────────────────
 
-class Grammar(BaseModel):
-    is_correct: bool
-    corrected_text: str = ""
-    explanation: str = ""
-    pronunciation: str = ""
+class DebateFeedback(BaseModel):
+    """Post-turn debate card: stance on the learner's claim, running score,
+    counter-argument, one piece of evidence, next challenge question."""
+    stance: str = "partially_agree"  # agree | partially_agree | disagree
+    score: int = 50
+    score_delta: int = 0
+    counter: str = ""
+    evidence: str = ""
+    next: str = ""
 
 
 class TurnPayload(BaseModel):
     text: str
     translation: str = ""
     pronunciation: str = ""
-    grammar: Optional[Grammar] = None
+    feedback: Optional[DebateFeedback] = None
     audio_base64: str = ""
 
 

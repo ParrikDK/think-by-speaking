@@ -1,3 +1,3 @@
-"""Speak, Don't Just Read v12 backend application package."""
+"""Debate Tutor v13 backend application package."""
 
-__version__ = "12.0.0"
+__version__ = "13.0.0"

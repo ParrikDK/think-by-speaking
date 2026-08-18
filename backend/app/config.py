@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── Database ──
-    database_url: str = "sqlite:///./speaking_tutor.db"
+    database_url: str = "sqlite:///./debate_tutor.db"
 
     # ── Sessions ──
     session_ttl_minutes: int = 30      # guest session TTL

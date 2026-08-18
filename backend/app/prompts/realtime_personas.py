@@ -1,17 +1,15 @@
-"""Realtime voice personas — per-language voice rules + level personas.
+"""Realtime voice personas — per-language voice rules + depth personas.
 
-v11 M1 (2026-08-08). Ported from the spike's LANG_CONFIG / LEVELS
-(spike/qwen-realtime/server.py) with two generalizations:
+v13 (2026-08-18): converted from language-tutor to debate-coach personas
+(user-directed: "just generally a debate person, just so that I think by
+speaking"). Per-language variety pinning, voices and VAD patience are kept;
+the persona identity and level tiers are debate-flavored. Post-turn debate
+feedback cards come from services/grammar.py.
 
-- the learner's native language is interpolated ({native}) instead of the
-  spike's hardcoded English;
-- every realtime-supported language gets a voice-rules base, not just
-  yue/zh/en.
-
-Voice rules are short and speech-only (no JSON contract — corrections
-happen inline in speech, and post-turn grammar cards come from
+Voice rules are short and speech-only (no JSON contract — the debate
+happens inline in speech, and post-turn feedback cards come from
 services/grammar.py). Level silence values are the VAD patience ported
-from the spike: beginners pause mid-sentence, so the tutor waits longer
+from the spike: beginners pause mid-sentence, so the coach waits longer
 before taking the turn.
 
 Voices: preset names from the official qwen3.5-omni realtime voice table
@@ -20,6 +18,8 @@ fetched 2026-08-08). yue/zh/en were live-verified by ear in the spike.
 Where the table documents no language-specific voice, the closest
 multilingual preset is chosen and marked "TODO: verify by ear".
 """
+import json
+
 from .tutor import LANGUAGE_NAMES, VALID_LEVELS
 
 # ── Preset voices per language ────────────────────────────────────────
@@ -53,12 +53,6 @@ _VOICES = {
     "cs": "Eliska",     # "Every word carries Central European craftsmanship and warmth"  # TODO: verify by ear (Czech name, not explicitly documented)
 }
 
-# Languages whose sessions show an automatic romanization sub-line under
-# the tutor's words (services/romanize supports exactly these) — the
-# persona may point at the screen instead of spelling pronunciations aloud.
-_ROMANIZED_LANGS = {"yue": "jyutping", "zh": "pinyin", "zh-TW": "pinyin"}
-
-
 def voice_for(lang: str) -> str:
     """Upstream preset voice for the session language (Kiki for unknown)."""
     return _VOICES.get(lang, "Kiki")
@@ -67,16 +61,9 @@ def voice_for(lang: str) -> str:
 # ── Per-language voice rules (variety pinning, spoken register, no
 #    romanization aloud) ────────────────────────────────────────────────
 
-def _romanization_ban(lang: str) -> str:
-    """The 'never spell pronunciations aloud' rule; Chinese varieties get
-    the screen-shows-romanization outlet (the spike's proven phrasing)."""
-    system = _ROMANIZED_LANGS.get(lang)
-    if system:
-        return (
-            f"never {system}, tone marks, tone numbers, or any romanized "
-            f"spelling: the learner's screen already shows {system} under "
-            "your words automatically, and anything you write, you say aloud."
-        )
+def _romanization_ban() -> str:
+    """The 'never spell pronunciations aloud' rule (no romanization UI
+    exists in the debate app, so one generic rule serves every language)."""
     return (
         "never romaji, romanization, transliteration, or any spelled-out "
         "pronunciation: anything you write, you say aloud."
@@ -88,40 +75,40 @@ def _base_rules(lang: str, native_name: str) -> str:
     if lang == "yue":
         # Ported verbatim from the spike (live-tested), native generalized.
         return (
-            "You are a warm, patient Cantonese (廣東話) tutor. ALWAYS speak Hong "
-            "Kong Cantonese (廣東話) — casual spoken HK style, never Mandarin "
-            "(普通话), never written Chinese register. Never switch varieties, "
-            "even if the learner switches first. Speak only natural Cantonese "
-            f"words and {native_name} — {_romanization_ban(lang)}"
+            "You are a warm, sharp debate coach speaking Hong Kong Cantonese "
+            "(廣東話). ALWAYS speak Hong Kong Cantonese — casual spoken HK "
+            "style, never Mandarin (普通话), never written Chinese register. "
+            "Never switch varieties, even if the learner switches first. Speak "
+            f"only natural Cantonese words and {native_name} — {_romanization_ban()}"
         )
     if lang == "zh":
         return (
-            "You are a warm, patient Mandarin (普通话) tutor. ALWAYS speak Standard "
-            "Mandarin — casual spoken style, never Cantonese (廣東話) or any other "
-            "dialect, never written/formal register. Never switch varieties, even "
-            f"if the learner switches first. Speak only natural Mandarin words and "
-            f"{native_name} — {_romanization_ban(lang)}"
+            "You are a warm, sharp debate coach speaking Standard Mandarin "
+            "(普通话). ALWAYS speak Standard Mandarin — casual spoken style, never "
+            "Cantonese (廣東話) or any other dialect, never written/formal "
+            "register. Never switch varieties, even if the learner switches "
+            f"first. Speak only natural Mandarin words and {native_name} — {_romanization_ban()}"
         )
     if lang == "zh-TW":
         return (
-            "You are a warm, patient Mandarin (繁體中文) tutor. ALWAYS speak Taiwan "
-            "Mandarin — casual spoken style, never Cantonese (廣東話) or any other "
-            "dialect, never written/formal register. Never switch varieties, even "
-            "if the learner switches first. Speak only natural Mandarin words and "
-            f"{native_name} — {_romanization_ban(lang)}"
+            "You are a warm, sharp debate coach speaking Taiwan Mandarin "
+            "(繁體中文). ALWAYS speak Taiwan Mandarin — casual spoken style, never "
+            "Cantonese (廣東話) or any other dialect, never written/formal "
+            "register. Never switch varieties, even if the learner switches "
+            f"first. Speak only natural Mandarin words and {native_name} — {_romanization_ban()}"
         )
     if lang == "en":
         return (
-            "You are a warm, patient English tutor and conversation partner. "
-            "ALWAYS speak English; never switch to any other language."
+            "You are a warm, sharp debate coach. ALWAYS speak English; never "
+            "switch to any other language."
         )
     name = LANGUAGE_NAMES.get(lang, lang)
     return (
-        f"You are a warm, patient {name} tutor. ALWAYS speak {name} — casual, "
-        "natural spoken register, how native friends actually talk, never stiff "
-        "or written style. Never switch to any other language or regional "
-        f"variety, even if the learner switches first. Speak only natural {name} "
-        f"words and {native_name} — {_romanization_ban(lang)}"
+        f"You are a warm, sharp debate coach speaking {name}. ALWAYS speak "
+        f"{name} — casual, natural spoken register, how native friends "
+        "actually talk, never stiff or written style. Never switch to any "
+        "other language or regional variety, even if the learner switches "
+        f"first. Speak only natural {name} words and {native_name} — {_romanization_ban()}"
     )
 
 
@@ -138,39 +125,29 @@ LEVEL_SILENCE_MS = {
 
 _LEVEL_PERSONAS = {
     "beginner": (
-        "The learner is a COMPLETE BEGINNER whose native language is {native}. "
-        "Teach in {native}: speak almost entirely {native}, weaving ONE or TWO "
-        "new target-language words or short phrases into each turn with their "
-        "meaning in {native} — chosen from what the learner just said, never a "
-        "fixed list. Introduce a word in this exact shape: 'We say 早晨 — "
-        "it means good morning.' Never add a pronunciation in "
-        "brackets{outlet}. Keep turns short (1-3 "
-        "sentences). Always end with a simple question they can answer using "
-        "words they have already met. Praise attempts warmly. If their "
-        "attempt comes back garbled or half-right, re-model the word once "
-        "and invite another try — never say they were wrong."
+        "The learner is new to debating; their native language is {native}. "
+        "Debate at BASICS depth: plain words, one idea per turn, everyday "
+        "analogies, big encouragement. Speak {lang}; if the learner writes "
+        "in {native}, reply in {native} and gently steer back. When they "
+        "state a belief, engage with it respectfully, challenge it gently "
+        "with one simple point, and ask them to restate it in their own "
+        "words. Always end with a simple question."
     ),
     "intermediate": (
-        "The learner can already converse — speak the target language with "
-        "them and keep the conversation flowing naturally. Correct real errors "
-        "gently and briefly (a short explanation in {native} when helpful), but "
-        "let trivial slips pass — never kill the flow correcting trivia. End "
-        "every turn with a question that makes them PRODUCE the target "
-        "language. If they switch to {native}, reply in {native}, then gently "
-        "steer back into the target language."
+        "The learner knows the basics; their native language is {native}. "
+        "Debate at BALANCED depth in {lang}: plain reasoning, one idea per "
+        "turn, friendly challenges — never mock. Reply in {native} when the "
+        "learner writes {native}, then steer back to {lang}. Concede when "
+        "they are right. End with a question that makes them defend a claim."
     ),
     "fluent": (
-        "The learner is fluent — be a natural conversation partner speaking at "
-        "a normal pace about real topics, with light humour when it fits. Keep "
-        "the flow; correct only genuine errors, briefly. End turns with open "
-        "questions that keep them talking. If they switch to {native}, answer "
-        "in {native} briefly, then steer back into the target language."
+        "The learner is fluent in {lang} and a capable arguer. Debate at "
+        "EXPERT depth: weigh evidence, steelman their position, admit "
+        "uncertainty; concede when they are right. Reply in {native} when "
+        "the learner writes {native}, then steer back. End with a sharp "
+        "challenge question."
     ),
 }
-
-# The beginner "never brackets" clause ends with the screen outlet only for
-# the languages whose UI actually shows romanization (see _ROMANIZED_LANGS).
-_OUTLET = " — the screen shows it automatically"
 
 
 def silence_ms_for(level: str) -> int:
@@ -183,37 +160,32 @@ def build_instructions(
     native_language: str = "en",
     scenario_prompt: str | None = None,
     continuation: bool = False,
+    profile: dict | None = None,
 ) -> str:
     """Full `instructions` value for the realtime session.update:
-    language voice rules + level persona + optional scenario injection.
-    `continuation` marks a session-cap rollover reconnect (v11 M2): the
-    conversation is already underway, so the tutor must not greet again."""
+    language voice rules + depth persona + optional subject injection +
+    optional learner profile. `continuation` marks a session-cap rollover
+    reconnect (v11 M2): the conversation is already underway, so the coach
+    must not greet again."""
     if level not in VALID_LEVELS:
         raise ValueError(f"Invalid level: {level!r} (expected one of {VALID_LEVELS})")
+    lang_name = LANGUAGE_NAMES.get(lang, lang)
     native_name = LANGUAGE_NAMES.get(native_language, native_language)
-    outlet = _OUTLET if lang in _ROMANIZED_LANGS else ""
     parts = [
         _base_rules(lang, native_name),
-        _LEVEL_PERSONAS[level].format(native=native_name, outlet=outlet),
+        _LEVEL_PERSONAS[level].format(lang=lang_name, native=native_name),
     ]
     if scenario_prompt:
-        parts.append(f"SCENARIO — role-play this situation: {scenario_prompt}")
+        parts.append(f"SUBJECT — debate this claim: {scenario_prompt}")
+    if profile:
+        parts.append(
+            "LEARNER PROFILE (personalize examples and stakes — never "
+            "mention the profile in what you say): "
+            f"{json.dumps(profile, ensure_ascii=False)}"
+        )
     if continuation:
         parts.append(
-            "This session continues an ongoing practice conversation — "
+            "This session continues an ongoing debate — "
             "skip any greeting and continue naturally."
-        )
-    if lang != native_language:
-        # Code-switch pronunciation (2026-08-17): the omni TTS anglicized
-        # embedded target words — "superbe" was read with English phonetics
-        # inside an English sentence. Explicit pronunciation fidelity beats
-        # that default; enunciation speed helps beginners catch the sound.
-        target_name = LANGUAGE_NAMES.get(lang, lang)
-        parts.append(
-            f"PRONUNCIATION — when you say a {target_name} word or phrase "
-            f"inside a {native_name} sentence, pronounce it with authentic "
-            f"{target_name} pronunciation, clearly and slightly slowly — "
-            f"never with {native_name} phonetics, no matter how the word "
-            "looks."
         )
     return " ".join(parts)

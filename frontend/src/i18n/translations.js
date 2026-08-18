@@ -5,9 +5,9 @@ const translations = {
   // ── English (default) ──
   en: {
     // LoginPage
-    "login.title": "Speak, Don't Just Read",
+    "login.title": "Debate Tutor — think by speaking",
     "login.welcome": "Welcome back.",
-    "login.signup_prompt": "Create an account to start speaking.",
+    "login.signup_prompt": "Create an account to keep your debates.",
     "login.username": "Username",
     "login.password": "Password",
     "login.signin": "Sign in",
@@ -17,32 +17,32 @@ const translations = {
     "login.placeholder_user": "your username",
     "login.placeholder_pass": "••••••••",
 
-    // NativeLanguagePicker
+    // NativeLanguagePicker (legacy — the tutor explains in the UI language)
     "native.title": "Native language?",
     "native.desc":
-      "The tutor will explain grammar and translate into this language.",
+      "The coach explains and translates into this language.",
     "native.skip": "Default to English",
 
     // LanguagePicker
-    "lang.title": "Learn?",
+    "lang.title": "Debate language?",
     "lang.select": "Select a language…",
     "setup.popular": "Popular",
     "setup.all": "All languages",
     "lang.back": "← native language",
     "lang.native_tag": "(native)",
 
-    // LevelSelector
-    "level.title": "Level?",
+    // LevelSelector (debate depth)
+    "level.title": "Debate depth?",
     "level.back": "← back",
-    "level.scenario_label": "Scenario (optional)",
-    "level.scenario_default": "General conversation",
-    "level.beginner": "Beginner",
-    "level.intermediate": "Intermediate",
-    "level.fluent": "Fluent",
+    "level.scenario_label": "Subject (optional)",
+    "level.scenario_default": "Free debate",
+    "level.beginner": "Basics",
+    "level.intermediate": "Balanced",
+    "level.fluent": "Expert",
 
     // TopBar
     "topbar.logout": "log out",
-    "topbar.new_conversation": "new conversation",
+    "topbar.new_conversation": "new debate",
     "topbar.voice": "voice",
 
     // MicButton
@@ -59,7 +59,7 @@ const translations = {
 
     // MessageBubble
     "bubble.you": "you",
-    "bubble.tutor": "tutor",
+    "bubble.tutor": "coach",
     "bubble.replay": "replay",
     "bubble.speed_0-7x": "0.7x",
     "bubble.speed_1x": "1x",
@@ -68,27 +68,27 @@ const translations = {
 
     // LoadingScreen
     "loading.tip_label": "💡",
-    "loading.tip_1": "🎤 Tap the mic, speak, then tap again to send.",
+    "loading.tip_1": "🎤 Tap the mic, make your claim, then tap again to send.",
     "loading.tip_2": "⌨️ Press the spacebar to toggle the microphone.",
     "loading.tip_3":
-      "📚 Grammar corrections appear under your messages.",
-    "loading.tip_4": "✏️ The tutor corrects your mistakes with explanations.",
-    "loading.tip_5": "🔊 Tap 0.7x to slow down audio for harder sentences.",
-    "loading.tip_6": "🎭 You can ask the tutor for different scenarios.",
+      "💬 After every turn: a fact-check, a counter-argument, and your debate score.",
+    "loading.tip_4": "⚔️ Pick a subject and defend your position — the coach pushes back.",
+    "loading.tip_5": "🔊 Tap 0.7x to slow down audio for harder arguments.",
+    "loading.tip_6": "🧠 Say your claim out loud: the more you argue, the more you learn.",
     "loading.tip_7":
-      "💬 Speak full sentences cus the more you say, the more you learn.",
-    "loading.msg_1": "Preparing your AI tutor…",
+      "💬 Speak full sentences — the more you say, the more the coach has to answer.",
+    "loading.msg_1": "Preparing your debate coach…",
     "loading.msg_2": "Warming up the voice engine…",
     "loading.msg_3": "Brewing digital tea…",
-    "loading.msg_4": "Polishing the virtual chalkboard…",
+    "loading.msg_4": "Polishing the arguments…",
     "loading.msg_5": "Untangling the audio cables…",
     "loading.msg_6": "Feeding the neural network…",
     "loading.msg_7": "Transcribing the universe…",
 
     // Scenarios (from backend)
-    "scenario.general": "General conversation",
+    "scenario.general": "Free debate",
 
-    // Realtime voice chat (v11 M2)
+    // Realtime voice chat (v11 M2 → v13 debate)
     "rt.hold_to_talk": "Hold to talk",
     "rt.tap_to_start": "Tap to start",
     "rt.release_to_send": "Release to send",
@@ -96,19 +96,19 @@ const translations = {
     "rt.hands_free": "hands-free",
     "rt.end": "End",
     "rt.listening": "Listening…",
-    "rt.tutor_speaking": "Tutor is speaking…",
+    "rt.tutor_speaking": "Coach is speaking…",
     "rt.connecting": "Connecting…",
     "rt.reconnecting": "Reconnecting…",
-    "rt.unclear_transcript": "(couldn't transcribe that — the tutor still heard you)",
-    "rt.trial_ended": "Your free voice trial is over — create a free account to keep talking.",
+    "rt.unclear_transcript": "(couldn't transcribe that — the coach still heard you)",
+    "rt.trial_ended": "Your free voice trial is over — create a free account to keep debating.",
     "rt.quota_ended": "Today's free voice minutes are used up — come back tomorrow.",
-    "rt.say_hello": "Say hello to your tutor.",
-    "rt.typed_placeholder": "Type to the tutor…",
-    "rt.empty_hint_ptt": "Hold the mic and talk — release to send. The tutor replies with voice and a transcript here. Slide off to cancel.",
-    "rt.empty_hint_handsfree": "Tap the mic and just talk — the tutor replies with voice and a transcript here. Talk over it any time to interrupt.",
-    "rt.starter_label": "or send your first line:",
-    "rt.grammar_ok": "Nice — no corrections",
-    "rt.interrupt": "Interrupt the tutor",
+    "rt.say_hello": "Open with your first claim.",
+    "rt.typed_placeholder": "Type your argument…",
+    "rt.empty_hint_ptt": "Hold the mic and make your claim — release to send. The coach replies with voice and a transcript here. Slide off to cancel.",
+    "rt.empty_hint_handsfree": "Tap the mic and just talk — the coach replies with voice and a transcript here. Talk over it any time to interrupt.",
+    "rt.starter_label": "or open the debate:",
+    "rt.grammar_ok": "Good claim — nothing to rebut.",
+    "rt.interrupt": "Interrupt the coach",
     "rt.mic_blocked": "Microphone access was blocked. Allow the mic in the browser address bar, then tap to try again.",
     "rt.reconnect_failed": "The connection dropped and reconnecting failed. Tap the mic to start again.",
     "rt.replay_failed": "Replay failed in this browser.",
@@ -1256,12 +1256,12 @@ const translations = {
 const extra = {
   en: {
     // Welcome / landing
-    "welcome.cta": "Start learning",
+    "welcome.cta": "Start debating",
     "welcome.login": "Log in",
     "welcome.logout": "Log out",
     "welcome.progress": "My progress",
     "welcome.ui_language": "Interface language",
-    "welcome.guest_note": "No account needed. Guests can chat freely.",
+    "welcome.guest_note": "No account needed. Guests can debate freely.",
 
     // Common
     "common.back": "← Back",
@@ -1280,7 +1280,7 @@ const extra = {
     "auth.login_title": "Welcome back.",
     "auth.register_title": "Create your account.",
     "auth.login_sub": "Pick up where you left off.",
-    "auth.register_sub": "Save your history and track your progress.",
+    "auth.register_sub": "Save your debates and track your progress.",
     "auth.switch_to_register": "No account? Create one",
     "auth.switch_to_login": "Have an account? Log in",
     "auth.guest": "Continue as guest",
@@ -1289,18 +1289,18 @@ const extra = {
     "auth.error_generic": "Could not sign you in. Please try again.",
 
     // Onboarding
-    "target.desc": "Pick one of 31 languages.",
-    "accent.label": "Accent",
-    "scenario.pick_title": "Where?",
+    "target.desc": "Pick the language you'll debate in.",
+    "accent.label": "Accent",  // legacy — accent chips removed in v13
+    "scenario.pick_title": "Pick a subject",
     "scenario.pick_desc":
-      "Scenarios shape the conversation. You can always just talk freely.",
-    "scenario.free_talk": "Free talk",
+      "You debate the subject you pick. You can also bring your own topics.",
+    "scenario.free_talk": "Free debate",
     "scenario.free_talk_desc":
-      "No script. Chat about anything with your tutor.",
-    "scenario.start": "Start session",
+      "No script. Debate anything on your mind with the coach.",
+    "scenario.start": "Start debate",
 
     // Chat
-    "chat.type_placeholder": "Type a message…",
+    "chat.type_placeholder": "Type your argument…",
     "chat.send": "Send",
     "chat.typing_mode": "Typing mode",
     "chat.end_session": "End session",
@@ -1320,33 +1320,61 @@ const extra = {
     "chat.vad_error": "Mic error",
     "chat.error_tts_regen": "Audio generation failed",
     "bubble.retry_audio": "Retry audio",
-    "grammar.well_done": "Well said!",
-    "grammar.correction": "Correction",
+    "grammar.well_done": "Strong point!",
+    "grammar.correction": "Coach's rebuttal",
+
+    // Learner profile (v13 — the personalization moat)
+    "profile.title": "Your profile",
+    "profile.desc": "The coach personalizes every debate to you — your interests, your style.",
+    "profile.interests": "What do you care about?",
+    "profile.style": "How should the coach push back?",
+    "profile.skip": "Skip for now",
+    "profile.interest.tech": "Tech & AI",
+    "profile.interest.health": "Health & fitness",
+    "profile.interest.money": "Money & work",
+    "profile.interest.society": "Society & culture",
+    "profile.interest.education": "Education",
+    "profile.interest.sports": "Sports",
+    "profile.interest.politics": "Politics",
+    "profile.interest.arts": "Arts & ideas",
+    "profile.style.devils_advocate": "Devil's advocate",
+    "profile.style.socratic": "Socratic",
+    "profile.style.encouraging": "Encouraging",
+
+    // Debate feedback card (v13)
+    "debate.score": "Score",
+    "debate.stance.agree": "Strong point",
+    "debate.stance.partially_agree": "Partly right",
+    "debate.stance.disagree": "Coach disagrees",
+    "debate.counter": "Coach's rebuttal",
+    "debate.evidence": "The evidence",
+    "debate.next": "Your challenge",
+    "debate.ack": "Good claim — nothing to rebut.",
 
     // History
-    "history.title": "Your sessions",
-    "history.sub": "Review, resume, or delete past conversations.",
+    "history.title": "Your debates",
+    "history.sub": "Review, resume, or delete past debates.",
     "history.empty":
-      "No sessions yet. Start a conversation and it will show up here.",
-    "history.resume": "Practice again",
+      "No debates yet. Start one and it will show up here.",
+    "history.resume": "Debate again",
     "history.delete": "Delete",
     "history.confirm_delete": "Delete this session? This cannot be undone.",
     "history.view": "View",
     "history.hide": "Hide",
     "history.messages": "messages",
-    "history.login_prompt": "Log in to see your past sessions.",
+    "history.login_prompt": "Log in to see your past debates.",
     "history.load_error": "Could not load your history.",
 
     // Progress
     "progress.title": "Your progress",
-    "progress.sub": "Every conversation counts.",
+    "progress.sub": "Every debate makes you sharper.",
     "progress.sessions": "Sessions",
     "progress.messages": "Messages",
     "progress.minutes": "Minutes",
     "progress.streak": "day streak",
-    "progress.by_language": "By language",
+    "progress.by_language": "By debate language",
     "progress.recent": "Recent sessions",
-    "progress.empty": "Nothing here yet. Have your first conversation!",
+    "progress.empty": "Nothing here yet. Have your first debate!",
     "progress.login_prompt": "Log in to track your progress.",
     "progress.load_error": "Could not load your stats.",
   },

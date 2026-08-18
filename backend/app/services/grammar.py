@@ -1,53 +1,40 @@
-"""Post-turn grammar cards for realtime voice sessions.
+"""Post-turn debate feedback cards for realtime voice sessions.
 
-v11 M1 (2026-08-08). Ported from the spike's async DeepSeek check
-(spike/qwen-realtime/server.py): after a completed voice turn, judge the
-learner's target-language attempt and return a small JSON card
-{is_correct, corrected_text, explanation} — the explanation one short
-sentence in the learner's NATIVE language (the spike hardcoded English).
+v13 (2026-08-18): repurposed from grammar-checking to debate judging. After
+a completed voice turn, judge the learner's claim against evidence and
+logic and return a small JSON card {stance, score, score_delta, counter,
+evidence, next} — the text fields one or two sentences in the learner's
+NATIVE language. The cascade path gets the same card from the main LLM via
+the JSON contract; this service covers the realtime (speech-to-speech)
+path, exactly as the grammar card did in v11/v12.
 
 Uses the shared DeepSeek client + v4 flags from services.llm (cheap
 deepseek_model_fast, json_object mode, thinking disabled, 15s timeout).
-Never raises and returns None instead — a grammar failure must not delay
+Never raises and returns None instead — a feedback failure must not delay
 or break the voice path.
 """
-import re
-
 from loguru import logger
 
 from ..config import get_settings
 from ..prompts.tutor import LANGUAGE_NAMES
 from . import llm
 
-# Friendly language names for the checker prompt (spike phrasing for yue).
-_LANG_NAME = {"yue": "Cantonese (Hong Kong 廣東話)"}
-
-# Script gate: for target languages written in a non-Latin script, a
-# transcript with zero target-script chars is native-language chatter (or
-# an ASR misfire the wrong-script guard already flagged) — nothing to
-# correct, skip the LLM call. Ported from the spike's CJK gate and extended
-# to Japanese kana / Korean hangul.
-_TARGET_SCRIPT_RE = {
-    "yue": re.compile(r"[一-鿿㐀-䶿]"),
-    "zh": re.compile(r"[一-鿿㐀-䶿]"),
-    "zh-TW": re.compile(r"[一-鿿㐀-䶿]"),
-    "ja": re.compile(r"[぀-ヿ一-鿿]"),
-    "ko": re.compile(r"[가-힣]"),
-    "ru": re.compile(r"[Ѐ-ӿ]"),
-    "ar": re.compile(r"[؀-ۿ]"),
-    "he": re.compile(r"[֐-׿]"),
-    "hi": re.compile(r"[ऀ-ॿ]"),
-    "th": re.compile(r"[แ-๟]"),
-}
-
 _SYSTEM = (
-    "You are a grammar checker for a {language} learner (level {level}), "
-    "native {native} speaker. Judge ONLY the target-language parts of what "
-    "they said; ignore {native} chatter. Respond with JSON: "
-    "{{\"is_correct\": bool, \"corrected_text\": string, \"explanation\": "
-    "string}} — explanation one short sentence in {native}. is_correct=true "
-    "when the target-language attempt is correct or there is nothing to "
-    "correct."
+    "You are a debate judge and fact-checker for a nutrition-neutral "
+    "general debate. You are given the learner's claim, the coach's reply, "
+    "and recent turns of the conversation. Judge the learner's claim "
+    "against evidence and logic. Respond with JSON only: "
+    "{{\"stance\": \"agree\"|\"partially_agree\"|\"disagree\", "
+    "\"score\": int 0-100, \"score_delta\": int -8..8, \"counter\": string, "
+    "\"evidence\": string, \"next\": string}} — counter, evidence and next "
+    "are one or two sentences in {native}. stance: agree = the claim is "
+    "essentially right; partially_agree = some truth, some error; disagree "
+    "= wrong or unsupported. score is the running debate score from the "
+    "learner's viewpoint: start at 50, move at most ±8 from the last "
+    "reported score, clamp 0-100. When the transcript is too short or "
+    "unclear to judge: stance \"partially_agree\", score_delta 0, counter "
+    "\"Could you say that again — I want to debate your real claim?\", "
+    "evidence \"\", next \"\"."
 )
 
 
@@ -57,27 +44,24 @@ async def check(
     native_language: str,
     user_text: str,
     tutor_text: str = "",
+    history_text: str = "",
 ) -> dict | None:
-    """Grammar card for one completed turn, or None when skipped/failed.
+    """Debate feedback card for one completed turn, or None when skipped/failed.
 
-    Skips (returns None without calling the LLM): no DeepSeek key, empty
-    transcript, or a transcript with no target-script characters for the
-    script-gated languages above.
+    Skips (returns None without calling the LLM): no DeepSeek key or empty
+    transcript.
     """
     settings = get_settings()
     if not settings.deepseek_api_key or not user_text.strip():
         return None
-    script_re = _TARGET_SCRIPT_RE.get(lang)
-    if script_re is not None and not script_re.search(user_text):
-        return None
 
-    prompt_user = f'Learner said: "{user_text}"'
+    prompt_user = f'Learner claim: "{user_text}"'
     if tutor_text:
-        prompt_user += f'\nTutor replied (context): "{tutor_text}"'
+        prompt_user += f'\nCoach reply (context): "{tutor_text}"'
+    if history_text:
+        prompt_user += f"\nRecent turns:\n{history_text}"
     messages = [
         {"role": "system", "content": _SYSTEM.format(
-            language=_LANG_NAME.get(lang, LANGUAGE_NAMES.get(lang, lang)),
-            level=level,
             native=LANGUAGE_NAMES.get(native_language, native_language),
         )},
         {"role": "user", "content": prompt_user},
@@ -87,7 +71,7 @@ async def check(
             model=settings.deepseek_model_fast,
             messages=messages,
             temperature=0.2,
-            max_tokens=300,
+            max_tokens=400,
             response_format=llm._JSON_MODE,
             extra_body=llm._THINKING_OFF,
             timeout=15.0,
@@ -95,10 +79,13 @@ async def check(
         content = (response.choices[0].message.content or "").strip()
         data = llm.extract_json(content)
         return {
-            "is_correct": bool(data.get("is_correct")),
-            "corrected_text": str(data.get("corrected_text") or ""),
-            "explanation": str(data.get("explanation") or ""),
+            "stance": str(data.get("stance") or "partially_agree"),
+            "score": int(data.get("score") or 50),
+            "score_delta": int(data.get("score_delta") or 0),
+            "counter": str(data.get("counter") or ""),
+            "evidence": str(data.get("evidence") or ""),
+            "next": str(data.get("next") or ""),
         }
     except Exception as exc:
-        logger.warning("Grammar check failed ({}): {}", lang, exc)
+        logger.warning("Debate feedback check failed ({}): {}", lang, exc)
         return None
