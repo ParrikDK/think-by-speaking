@@ -36,7 +36,7 @@ from ..prompts.realtime_personas import (
     silence_ms_for,
     voice_for,
 )
-from ..services import grammar
+from ..services import delivery, grammar
 from ..services.romanize import romanize
 from .turns import TurnTracker
 
@@ -297,6 +297,8 @@ async def run_bridge(
         )
         if result is None:
             return
+        # v13.1 delivery pillar: realtime turns are always spoken.
+        result["filler_count"] = delivery.count_fillers(user_text)
         try:
             await browser.send_text(json.dumps({
                 "type": "proxy.feedback",

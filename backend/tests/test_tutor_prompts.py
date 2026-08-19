@@ -209,6 +209,16 @@ def test_json_contract_instruction_present():
     assert '"score_delta"' in prompt
 
 
+def test_contract_carries_fallacies_and_structure():
+    """RhetoricX pillars (v13.1): the contract names the fallacy radar and
+    the structure line, and caps the fallacy list at 2."""
+    assert '"fallacies"' in JSON_CONTRACT
+    assert '"strawman"' in JSON_CONTRACT
+    assert '"red_herring"' in JSON_CONTRACT
+    assert '"structure"' in JSON_CONTRACT
+    assert "AT MOST the 2 most important fallacies" in JSON_CONTRACT
+
+
 def test_contract_feedback_null_only_on_greeting():
     assert "feedback is null ONLY on the very first greeting message" in JSON_CONTRACT
 
@@ -220,7 +230,7 @@ def test_contract_score_rules():
 
 
 def test_contract_screen_fields_in_native():
-    assert "counter, evidence and next are read on screen, never spoken" in JSON_CONTRACT
+    assert "are read on screen, never spoken" in JSON_CONTRACT
     assert "learner's native language" in JSON_CONTRACT
 
 

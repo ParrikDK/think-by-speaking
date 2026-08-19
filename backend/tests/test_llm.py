@@ -130,6 +130,32 @@ class TestNormalizePayload:
         with pytest.raises(ValueError, match="empty reply"):
             normalize_payload({"translation": ""})
 
+    def test_fallacies_coerced_and_capped_at_two(self):
+        """Fallacies arrive as a sanitized list, capped at 2."""
+        raw = {
+            "reply": "a",
+            "feedback": {
+                "stance": "disagree",
+                "fallacies": [
+                    {"type": "strawman", "quote": "you said X", "note": "n1"},
+                    {"type": "red_herring", "quote": "y", "note": "n2"},
+                    {"type": "ad_hominem", "quote": "z", "note": "n3"},
+                    "not-a-dict",
+                ],
+                "structure": "Good hook, thin evidence.",
+            },
+        }
+        result = normalize_payload(raw)
+        fb = result["feedback"]
+        assert len(fb["fallacies"]) == 2
+        assert fb["fallacies"][0]["type"] == "strawman"
+        assert fb["fallacies"][0]["quote"] == "you said X"
+        assert fb["structure"] == "Good hook, thin evidence."
+
+    def test_fallback_fallacies_empty(self):
+        result = fallback_payload("en")
+        assert result["feedback"] is None
+
     def test_feedback_dict_handling(self):
         """`feedback` as dict → structured; non-dict → None."""
         good = normalize_payload({"reply": "a", "feedback": {"stance": "agree", "score": 60}})

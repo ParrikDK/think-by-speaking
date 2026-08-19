@@ -1,4 +1,4 @@
-# Debate Tutor — API Contract (v13, 2026-08-18)
+# Think By Speaking — API Contract (v13, 2026-08-19)
 
 Backend: FastAPI on **port 8000** (canonical). Serves built frontend at `/` (static) and JSON API under `/api`.
 Frontend dev: Vite on :5173 proxying `/api` → :8000.

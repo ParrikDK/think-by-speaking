@@ -5,7 +5,7 @@ const translations = {
   // ── English (default) ──
   en: {
     // LoginPage
-    "login.title": "Debate Tutor — think by speaking",
+    "login.title": "Think By Speaking — think by speaking",
     "login.welcome": "Welcome back.",
     "login.signup_prompt": "Create an account to keep your debates.",
     "login.username": "Username",
@@ -1350,6 +1350,19 @@ const extra = {
     "debate.evidence": "The evidence",
     "debate.next": "Your challenge",
     "debate.ack": "Good claim — nothing to rebut.",
+    "debate.fallacies": "Fallacies",
+    "debate.delivery": "Delivery",
+    "debate.fillers": "fillers",
+    "debate.fallacy.strawman": "Strawman",
+    "debate.fallacy.ad_hominem": "Ad hominem",
+    "debate.fallacy.false_dilemma": "False dilemma",
+    "debate.fallacy.red_herring": "Red herring",
+    "debate.fallacy.slippery_slope": "Slippery slope",
+    "debate.fallacy.appeal_to_authority": "Appeal to authority",
+    "debate.fallacy.hasty_generalization": "Hasty generalization",
+    "debate.fallacy.no_true_scotsman": "No true Scotsman",
+    "debate.fallacy.circular_reasoning": "Circular reasoning",
+    "debate.fallacy.other": "Weak argument",
 
     // History
     "history.title": "Your debates",

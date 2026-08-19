@@ -1,4 +1,4 @@
-// Debate Tutor - v13 API client, implements docs/api-contract.md
+// Think By Speaking - v13 API client, implements docs/api-contract.md
 const API_BASE = '/api';
 
 const TOKEN_KEY = 'lf_token';

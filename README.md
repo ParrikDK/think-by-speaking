@@ -1,4 +1,4 @@
-# Debate Tutor — think by speaking
+# Think By Speaking — think by speaking
 
 A voice-first AI **debate coach**. Pick a subject ("Is social media bad for
 society?", "Will AI take our jobs?", or any topic you bring), then argue

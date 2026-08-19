@@ -99,6 +99,32 @@ def test_text_chat_turn_skips_stt(client, mock_services, monkeypatch):
     assert mock_services["stt"] == 0  # typed text → no STT call
 
 
+def test_fillers_counted_on_spoken_turns(client, mock_services, monkeypatch):
+    """RhetoricX delivery pillar: spoken turns count fillers (um/like);
+    typed turns carry none."""
+    async def zh_payload(messages, language="zh", native_language="en"):
+        return {
+            "reply": "That is fair!",
+            "translation": "That is fair!",
+            "feedback": {"stance": "partially_agree", "score": 52},
+        }
+
+    monkeypatch.setattr("app.services.llm.chat_json", zh_payload)
+
+    async def fake_transcribe(audio_bytes, language):
+        return "um, like, I think that is true, you know"
+
+    monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
+    session_id = _init(client, language="en")["session_id"]
+    r = client.post(
+        "/api/chat",
+        data={"session_id": session_id, "language": "en"},
+        files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reply"]["feedback"]["filler_count"] == 3  # um, like, you know
+
+
 def test_empty_audio_returns_localized_silence(client, mock_services):
     """Beginner level: the silence prompt is spoken in the learner's NATIVE
     language (they can't understand target-language speech yet)."""

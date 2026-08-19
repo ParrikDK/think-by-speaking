@@ -146,7 +146,13 @@ JSON_CONTRACT = (
     'learner\'s native language — one or two sentences>", "evidence": "<one '
     'evidence-backed fact or strong logical point in the learner\'s native '
     'language>", "next": "<the next challenge question in the learner\'s native '
-    'language — may be an empty string>"} | null\n'
+    'language — may be an empty string>", "fallacies": [{"type": "strawman"|"ad_hominem"|'
+    '"false_dilemma"|"red_herring"|"slippery_slope"|"appeal_to_authority"|'
+    '"hasty_generalization"|"no_true_scotsman"|"circular_reasoning"|"other", '
+    '"quote": "<the learner\'s own words that commit the fallacy>", "note": "<one '
+    'short line in the learner\'s native language>"}], "structure": "<one short '
+    'line in the learner\'s native language on the claim\'s structure — opening '
+    'hook, premise-to-conclusion flow, or evidentiary support>"} | null\n'
     "}\n"
     "Rules: feedback is null ONLY on the very first greeting message — every "
     "debate turn gets one. stance judges the accuracy of the learner's claim: "
@@ -155,11 +161,14 @@ JSON_CONTRACT = (
     "the learner's viewpoint: start at 50, move at most ±8 per turn based on "
     "evidence quality, accuracy, and how well they defend against pushback; "
     "clamp 0-100; score_delta is the signed change since the last turn. "
-    "counter, evidence and next are read on screen, never spoken — always in "
-    "the learner's native language. The \"reply\" is read aloud by "
-    "text-to-speech: pure natural language in the debate language, never "
-    "romanization, never meta-words like \"Translation\" or \"Correction\". "
-    "Never invent keys, never omit keys."
+    "fallacies: flag AT MOST the 2 most important fallacies in the learner's "
+    "claim, each with a short verbatim quote from their words; an empty list "
+    "when the claim commits none. structure: one short, encouraging line. "
+    "counter, evidence, next, fallacy notes and structure are read on screen, "
+    "never spoken — always in the learner's native language. The \"reply\" is "
+    "read aloud by text-to-speech: pure natural language in the debate "
+    "language, never romanization, never meta-words like \"Translation\" or "
+    "\"Correction\". Never invent keys, never omit keys."
 )
 
 

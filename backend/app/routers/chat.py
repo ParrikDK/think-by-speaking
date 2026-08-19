@@ -26,7 +26,7 @@ from ..models.schemas import (
 from ..prompts import get_scenario
 from ..prompts.tutor import VALID_LEVELS, build_messages, silence_message
 from ..routers.languages import SUPPORTED_LANGUAGES
-from ..services import llm, stt, tts
+from ..services import delivery, llm, stt, tts
 from .auth import get_optional_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -376,6 +376,11 @@ async def chat_turn(
             payload = {**payload, "reply": retried}
     turn = await _build_turn(payload, language, session.voice_id, session.level)
 
+    # v13.1 delivery pillar: fillers are counted only for SPOKEN turns
+    # (typed input carries no delivery signal).
+    if audio is not None and turn.feedback is not None:
+        turn.feedback.filler_count = delivery.count_fillers(user_text)
+
     session.add_message("user", user_text)
     session.add_message(
         "assistant", turn.text, translation=turn.translation,
@@ -467,6 +472,9 @@ async def chat_turn_stream(
         turn = await _build_turn(
             payload, language, session.voice_id, session.level, skip_audio=True
         )
+        # v13.1 delivery pillar: fillers for spoken turns only.
+        if audio is not None and turn.feedback is not None:
+            turn.feedback.filler_count = delivery.count_fillers(user_text)
         yield _sse("complete", ChatResponse(
             session_id=session_id, user_text=user_text, reply=turn, error_type=error_type,
         ).model_dump())
