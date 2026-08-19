@@ -323,7 +323,7 @@ export default function App() {
 
   const endSession = useCallback(async () => {
     // v13.1 spoken recap: on the cascade chat screen, End first asks the
-    // coach for a spoken session summary (once), then exits.
+    // debater for a spoken session summary (once), then exits.
     if (screen === 'chat' && sessionId && !recapShownRef.current) {
       recapShownRef.current = true;
       try {

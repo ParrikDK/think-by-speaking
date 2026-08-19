@@ -12,7 +12,7 @@ const MISSION_QUOTES = [
   { text: '"Generic advice is useless. My life is not a statistics page."', name: 'PDK' },
   { text: '"Nobody argues back on social media. They just block you."', name: 'P' },
   { text: '"Debating out loud is how I actually find out what I think."', name: 'Parrik' },
-  { text: '"One coach that knows my interests and always answers back? That\'s worth building."', name: 'PDK' },
+  { text: '"One debater that knows my interests and always answers back? That\'s worth building."', name: 'PDK' },
 ];
 
 function pickRandom(arr) {

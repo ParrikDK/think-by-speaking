@@ -1,9 +1,9 @@
-"""Debate-coach prompt tests: levels, subject injection, strict JSON
+"""Debate-debater prompt tests: levels, subject injection, strict JSON
 contract (feedback card), depth tiers, debate ethics, learner profile
 injection, history truncation, and no A1/B2 anywhere.
 
 v13 rewrite (2026-08-18): the app converted from a language tutor to a
-general debate coach ("just so that I think by speaking").
+general debater ("just so that I think by speaking").
 """
 import json
 
@@ -114,7 +114,7 @@ class TestLanguageRules:
     def test_write_reply_in_debate_language(self):
         prompt = build_system_prompt("fr", "fluent", is_init=False)
         assert "debating in French" in prompt or "debate in French" in prompt
-        assert "debate coach" in prompt
+        assert "debater" in prompt
 
     def test_flow_rules_in_non_init_only(self):
         for level in VALID_LEVELS:

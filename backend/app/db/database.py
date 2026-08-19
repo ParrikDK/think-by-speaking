@@ -66,6 +66,16 @@ CREATE TABLE IF NOT EXISTS user_stats (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- v13.1 (2026-08-19): long-term user memory — the "friend you meet every
+-- time" tier. One rolling memory JSON per user (episodic + semantic),
+-- consolidated by an LLM pass at session end, injected every turn.
+CREATE TABLE IF NOT EXISTS user_memories (
+    user_id TEXT PRIMARY KEY,
+    memory_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- v11 M1 (2026-08-08): realtime voice quota. Guests: user_id NULL, keyed
 -- by ip; registered users: keyed by user_id (ip ''). One row per key/day.
 CREATE TABLE IF NOT EXISTS usage_audio (

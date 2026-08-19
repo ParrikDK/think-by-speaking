@@ -263,9 +263,12 @@ async def run_bridge(
              "audio_bytes": 0, "bg": set(), "moderator_pending": False}
     # v13.1 spoken moderator: the client's response.create for a PTT turn
     # is held until the ASR transcript arrives, so the host can interject
-    # BEFORE the coach replies. A mutable dict — the pumps assign inside
-    # their own scopes and rebinding would shadow the outer values.
-    hold_state: dict = {"awaiting": False, "create": None}
+    # BEFORE the coach replies. awaiting counts commits that still owe an
+    # ASR (back-to-back turns each get their own release — v13.2), queue
+    # holds the pending response.creates in arrival order. A mutable dict —
+    # the pumps assign inside their own scopes and rebinding would shadow
+    # the outer values.
+    hold_state: dict = {"awaiting": 0, "queue": []}
     # v13.1: client-measured delivery metrics for the NEXT turn (sent as a
     # turn_metrics frame right before input_audio_buffer.commit).
     pending_metrics: dict = {}
@@ -424,11 +427,14 @@ async def run_bridge(
                     # meaningful when the session runs with VAD off (ptt mode).
                     if mode == "ptt":
                         if ctype == "input_audio_buffer.commit":
-                            hold_state["awaiting"] = True  # decide after the ASR
+                            # Count outstanding commits: each ASR releases
+                            # one held response, so back-to-back PTT turns
+                            # can't overwrite each other's create (v13.2).
+                            hold_state["awaiting"] += 1  # decide after the ASR
                         if ctype == "response.create" and hold_state["awaiting"]:
                             # v13.1: hold the coach response until the
                             # transcript decides whether the host interjects.
-                            hold_state["create"] = cmd
+                            hold_state["queue"].append(cmd)
                             logger.debug("REALTIME holding response.create (moderator decision)")
                             continue
                         logger.debug("REALTIME BROWSER->UP {}", ctype)
@@ -502,6 +508,15 @@ async def run_bridge(
                 continue
             etype = event.get("type", "")
 
+            # The moderator's own response also emits audio_transcript
+            # events — never render them as the coach's bubble (the client
+            # draws coach text from these events). Binary audio still flows.
+            if state["moderator_pending"] and etype in (
+                "response.audio_transcript.delta",
+                "response.audio_transcript.done",
+            ):
+                continue
+
             if etype == "response.audio.delta":
                 now = time.monotonic()
                 if state["first_audio_at"] is None:
@@ -542,12 +557,50 @@ async def run_bridge(
                             "type": "session.update",
                             "session": {"voice": voice},
                         }))
-                    if hold_state["create"]:
-                        await upstream.send(json.dumps(hold_state["create"]))
-                        hold_state["create"] = None
+                    if hold_state["queue"]:
+                        await upstream.send(json.dumps(hold_state["queue"].pop(0)))
                     continue
                 tracker.note_response_done(cancelled=(status == "cancelled"))
                 await after_turn_event(tracker.turn)
+                # v13.2 handsfree moderator (default ON): there is no
+                # client response.create to hold, so the host speaks AFTER
+                # the coach's reply on even debate turns — the same
+                # mid-session voice switch + one-off response.create as the
+                # PTT path. moderator_pending (set BEFORE the upstream
+                # responds) makes that response's done skip turn tracking
+                # and switch the voice back to the coach; its
+                # audio_transcript events are suppressed above so the line
+                # never renders as coach text.
+                if (
+                    mode == "handsfree"
+                    and status != "cancelled"
+                    and tracker.turn >= 2 and tracker.turn % 2 == 0
+                    and moderator_voice and moderator_voice != voice
+                    and (session.profile or {}).get("moderator", True) is not False
+                ):
+                    rec = tracker.records.get(tracker.turn)
+                    line = await _moderator_line_realtime(rec.user if rec else "")
+                    if line:
+                        try:
+                            await browser.send_text(json.dumps({
+                                "type": "proxy.moderator",
+                                "text": line,
+                                "turn": tracker.turn,
+                            }))
+                        except Exception:
+                            pass
+                        state["moderator_pending"] = True
+                        await upstream.send(json.dumps({
+                            "type": "session.update",
+                            "session": {"voice": moderator_voice},
+                        }))
+                        await upstream.send(json.dumps({
+                            "type": "response.create",
+                            "instructions": (
+                                "Say exactly this one line and nothing "
+                                f"else, in the learner's language: {line}"
+                            ),
+                        }))
             elif etype == "input_audio_buffer.speech_started" and state["responding"]:
                 # Barge-in: cancel the in-flight response when the user talks
                 # over it. The page flushes its playback queue on the same event.
@@ -581,8 +634,11 @@ async def run_bridge(
                     await after_turn_event(turn)
                     # v13.1 spoken moderator: the held response.create is
                     # released now — through the host first on even turns.
+                    # One release per ASR: back-to-back PTT turns each pop
+                    # their own create (v13.2 — a fixed dict entry could be
+                    # overwritten when a second commit beats the ASR echo).
                     if hold_state["awaiting"]:
-                        hold_state["awaiting"] = False
+                        hold_state["awaiting"] -= 1
                         if (
                             not state["moderator_pending"]
                             and turn >= 2 and turn % 2 == 0
@@ -611,9 +667,8 @@ async def run_bridge(
                                         f"else, in the learner's language: {line}"
                                     ),
                                 }))
-                        if hold_state["create"]:
-                            await upstream.send(json.dumps(hold_state["create"]))
-                            hold_state["create"] = None
+                        if hold_state["queue"]:
+                            await upstream.send(json.dumps(hold_state["queue"].pop(0)))
             elif etype == "response.audio_transcript.done":
                 event["turn"] = tracker.turn
                 transcript = event.get("transcript") or ""

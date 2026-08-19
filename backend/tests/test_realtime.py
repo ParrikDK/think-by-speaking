@@ -42,6 +42,7 @@ class FakeDashScope:
         self.next_reply = REPLY_TEXT
         self.auto_done = True
         self._audio = base64.b64encode(b"\x01\x00" * 2400).decode()  # 0.1s PCM16
+        self._ws = None  # set in _handler; lets tests emit server-side events
 
     def start(self):
         self._server = serve(self._handler, "127.0.0.1", 0)
@@ -54,6 +55,7 @@ class FakeDashScope:
         self._server.shutdown()
 
     def _handler(self, ws):
+        self._ws = ws
         try:
             for raw in ws:
                 self._on_event(ws, raw)
@@ -97,6 +99,29 @@ class FakeDashScope:
         if etype is None:
             return snapshot
         return [e for e in snapshot if e.get("type") == etype]
+
+    def emit_transcript(self, transcript: str = "") -> None:
+        """Handsfree: the server-side VAD 'hears' the user and the upstream
+        emits the ASR result unprompted (no client commit involved)."""
+        self._send({
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": transcript or self.next_transcript,
+        })
+
+    def emit_response(self, transcript: str | None = None) -> None:
+        """Handsfree: the upstream auto-replies after the user stops
+        speaking — a full response with no client response.create."""
+        self._send({"type": "response.created"})
+        self._send({"type": "response.audio.delta", "delta": self._audio})
+        self._send({
+            "type": "response.audio_transcript.done",
+            "transcript": self.next_reply if transcript is None else transcript,
+        })
+        if self.auto_done:
+            self._send({"type": "response.done", "response": {"status": "completed"}})
+
+    def _send(self, event: dict) -> None:
+        self._ws.send(json.dumps(event))
 
     def wait_for(self, etype: str, timeout: float = 5.0) -> dict:
         """Poll until an upstream-received event of this type exists."""
@@ -183,7 +208,7 @@ def test_session_update_ptt_cantonese(client, fake_upstream):
     assert sess["turn_detection"] is None  # ptt → VAD off, client drives turns
     assert sess["input_audio_transcription"]["model"] == get_settings().realtime_asr_model
     assert "廣東話" in sess["instructions"]
-    assert "debate coach" in sess["instructions"]
+    assert "debater" in sess["instructions"]
     assert "jyutping" not in sess["instructions"]
     assert "their native language is English" in sess["instructions"]
 
@@ -707,9 +732,102 @@ def test_spoken_turn_moderator_interjects_via_proxy_event(client, fake_upstream,
         ptt_turn(ws)  # framing turn
         ptt_turn(ws)  # turn 2 — moderator + coach
         events = collect_until(ws, lambda e: e.get("type") == "proxy.moderator", limit=24)
+        # The coach's held response.create is released right after the host
+        # line — wait for it, then the coach's reply, so teardown can't cut
+        # the turn short (a create released after the client closes is lost).
+        deadline = time.time() + 5
+        while len(fake_upstream.events("response.create")) < 3:
+            assert time.time() < deadline, "released coach response.create never arrived"
+            time.sleep(0.01)
+        collect_until(ws, lambda e: e.get("type") == "response.done", limit=24)
     mod = next(e for e in events if e.get("type") == "proxy.moderator")
     assert "steelman" in mod["text"]
     voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
     assert "Jennifer" in voices  # the host spoke
     creates = fake_upstream.events("response.create")
     assert len(creates) >= 3  # moderator line + released coach response (2 turns)
+
+
+def test_handsfree_moderator_speaks_after_coach_on_even_turns(client, fake_upstream, monkeypatch):
+    """Handsfree turns are upstream-driven (semantic_vad): there is no
+    client response.create to hold, so the host speaks AFTER the coach's
+    reply on even turns — proxy.moderator + a Jennifer response.create,
+    then the voice returns to Ethan (the moderator response is not a
+    tracked turn)."""
+    async def fake_fast(messages):
+        return "A fair challenge — the coach owes you a steelman there."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    with client.websocket_connect(
+        ws_url(lang="en", level="intermediate", mode="handsfree", voice="Ethan")
+    ) as ws:
+        fake_upstream.wait_for("session.update")
+        # Turn 1 (framing): the user speaks, the upstream auto-replies.
+        fake_upstream.emit_transcript("你好")
+        fake_upstream.emit_response()
+        collect_until(ws, lambda e: e.get("type") == "response.done")
+        # Turn 2 (debate start, even): the coach replies first, THEN the host.
+        fake_upstream.emit_transcript("你好")
+        fake_upstream.emit_response()
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.moderator", limit=24)
+        # The host line landed at the coach's response.done: the forwarded
+        # response.done and then the host's own response.created come right
+        # after it (her audio_transcript events are suppressed, so no coach
+        # bubble ever carries her line).
+        done = next_message(ws)
+        created = next_message(ws)
+        # Her response is still in flight and its response.done is
+        # proxy-side (never forwarded to the browser) — wait for the
+        # switch-back so teardown can't cut the host's turn short.
+        deadline = time.time() + 5
+        while len(fake_upstream.events("session.update")) < 5:
+            assert time.time() < deadline, "moderator switch-back never arrived"
+            time.sleep(0.01)
+    mod = next(e for e in events if e.get("type") == "proxy.moderator")
+    assert "steelman" in mod["text"]
+    assert mod["turn"] == 2
+    # The host line came after the coach's reply text, right before the
+    # coach's own response.done — never before the coach spoke.
+    assert done[1]["type"] == "response.done"
+    assert created[1]["type"] == "response.created"
+    coach_text = [e for e in events if e.get("type") == "response.audio_transcript.done"]
+    assert len(coach_text) == 1 and coach_text[0]["transcript"] == REPLY_TEXT
+    assert not any("steelman" in (e.get("transcript") or "")
+                   for e in events if e.get("type", "").startswith("response.audio_transcript"))
+    voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
+    # Jennifer opens the session, hands to Ethan after turn 1, returns for
+    # the turn-2 interjection, and hands back to Ethan once the host spoke.
+    # (The turn-1 handover fires twice — once from the ASR event, once from
+    # the response.done — pre-existing behavior shared with the PTT path.)
+    assert voices == ["Jennifer", "Ethan", "Ethan", "Jennifer", "Ethan"]
+    creates = fake_upstream.events("response.create")
+    assert len(creates) == 1  # the host line is the only handsfree response.create
+    assert "steelman" in creates[0].get("instructions", "")
+
+
+def test_handsfree_moderator_skips_when_disabled(client, fake_upstream, monkeypatch):
+    """moderator:false — the host never speaks in handsfree either: no
+    Jennifer in any session.update, no proxy.moderator, no extra
+    response.create."""
+    import urllib.parse
+
+    async def fake_fast(messages):
+        return "A fair challenge."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    profile = urllib.parse.quote('{"moderator": false}')
+    with client.websocket_connect(
+        ws_url(lang="en", level="intermediate", mode="handsfree", voice="Ethan", profile=profile)
+    ) as ws:
+        fake_upstream.wait_for("session.update")
+        fake_upstream.emit_transcript("你好")
+        fake_upstream.emit_response()
+        collect_until(ws, lambda e: e.get("type") == "response.done")  # turn 1
+        fake_upstream.emit_transcript("你好")
+        fake_upstream.emit_response()
+        events = collect_until(ws, lambda e: e.get("type") == "response.done")  # turn 2
+        time.sleep(0.2)  # a buggy moderator would have spoken by now
+    assert not any(e.get("type") == "proxy.moderator" for e in events)
+    voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
+    assert "Jennifer" not in voices
+    assert fake_upstream.events("response.create") == []  # no moderator line

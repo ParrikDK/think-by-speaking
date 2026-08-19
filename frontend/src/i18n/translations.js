@@ -20,7 +20,7 @@ const translations = {
     // NativeLanguagePicker (legacy — the tutor explains in the UI language)
     "native.title": "Native language?",
     "native.desc":
-      "The coach explains and translates into this language.",
+      "The debater explains and translates into this language.",
     "native.skip": "Default to English",
 
     // LanguagePicker
@@ -59,7 +59,7 @@ const translations = {
 
     // MessageBubble
     "bubble.you": "you",
-    "bubble.tutor": "coach",
+    "bubble.tutor": "debater",
     "bubble.moderator": "moderator",
     "bubble.replay": "replay",
     "bubble.speed_0-7x": "0.7x",
@@ -73,12 +73,12 @@ const translations = {
     "loading.tip_2": "⌨️ Press the spacebar to toggle the microphone.",
     "loading.tip_3":
       "💬 After every turn: a fact-check, a counter-argument, and your debate score.",
-    "loading.tip_4": "⚔️ Pick a subject and defend your position — the coach pushes back.",
+    "loading.tip_4": "⚔️ Pick a subject and defend your position — the debater pushes back.",
     "loading.tip_5": "🔊 Tap 0.7x to slow down audio for harder arguments.",
     "loading.tip_6": "🧠 Say your claim out loud: the more you argue, the more you learn.",
     "loading.tip_7":
-      "💬 Speak full sentences — the more you say, the more the coach has to answer.",
-    "loading.msg_1": "Preparing your debate coach…",
+      "💬 Speak full sentences — the more you say, the more the debater has to answer.",
+    "loading.msg_1": "Preparing your debater…",
     "loading.msg_2": "Warming up the voice engine…",
     "loading.msg_3": "Brewing digital tea…",
     "loading.msg_4": "Polishing the arguments…",
@@ -97,19 +97,19 @@ const translations = {
     "rt.hands_free": "hands-free",
     "rt.end": "End",
     "rt.listening": "Listening…",
-    "rt.tutor_speaking": "Coach is speaking…",
+    "rt.tutor_speaking": "Debater is speaking…",
     "rt.connecting": "Connecting…",
     "rt.reconnecting": "Reconnecting…",
-    "rt.unclear_transcript": "(couldn't transcribe that — the coach still heard you)",
+    "rt.unclear_transcript": "(couldn't transcribe that — the debater still heard you)",
     "rt.trial_ended": "Your free voice trial is over — create a free account to keep debating.",
     "rt.quota_ended": "Today's free voice minutes are used up — come back tomorrow.",
     "rt.say_hello": "Open with your first claim.",
     "rt.typed_placeholder": "Type your argument…",
-    "rt.empty_hint_ptt": "Hold the mic and make your claim — release to send. The coach replies with voice and a transcript here. Slide off to cancel.",
-    "rt.empty_hint_handsfree": "Tap the mic and just talk — the coach replies with voice and a transcript here. Talk over it any time to interrupt.",
+    "rt.empty_hint_ptt": "Hold the mic and make your claim — release to send. The debater replies with voice and a transcript here. Slide off to cancel.",
+    "rt.empty_hint_handsfree": "Tap the mic and just talk — the debater replies with voice and a transcript here. Talk over it any time to interrupt.",
     "rt.starter_label": "or open the debate:",
     "rt.grammar_ok": "Good claim — nothing to rebut.",
-    "rt.interrupt": "Interrupt the coach",
+    "rt.interrupt": "Interrupt the debater",
     "rt.mic_blocked": "Microphone access was blocked. Allow the mic in the browser address bar, then tap to try again.",
     "rt.reconnect_failed": "The connection dropped and reconnecting failed. Tap the mic to start again.",
     "rt.replay_failed": "Replay failed in this browser.",
@@ -1293,7 +1293,7 @@ const extra = {
       "You debate the subject you pick. You can also bring your own topics.",
     "scenario.free_talk": "Free debate",
     "scenario.free_talk_desc":
-      "No script. Debate anything on your mind with the coach.",
+      "No script. Debate anything on your mind with the debater.",
     "scenario.start": "Start debate",
 
     // Chat
@@ -1316,21 +1316,22 @@ const extra = {
     "chat.restart_mic": "Restart mic",
     "chat.vad_error": "Mic error",
     "chat.error_tts_regen": "Audio generation failed",
+    "chat.voice_first": "Voice-first",
     "bubble.retry_audio": "Retry audio",
     "grammar.well_done": "Strong point!",
-    "grammar.correction": "Coach's rebuttal",
+    "grammar.correction": "Debater's rebuttal",
 
-    // Coach voice (v13)
+    // Debater voice (v13)
     "voice_setup.title": "Voice setup",
     "voice_setup.entry": "Voice setup — answer by speaking",
-    "voice.title": "Coach voice?",
-    "voice.desc": "Your coach's voice — accent and gender.",
+    "voice.title": "Debater voice?",
+    "voice.desc": "Your debater's voice — accent and gender.",
 
     // Learner profile (v13 — the personalization moat)
     "profile.title": "Your profile",
-    "profile.desc": "The coach personalizes every debate to you — your interests, your style.",
+    "profile.desc": "The debater personalizes every debate to you — your interests, your style.",
     "profile.interests": "What do you care about?",
-    "profile.style": "How should the coach push back?",
+    "profile.style": "How should the debater push back?",
     "profile.moderator": "Moderator — a neutral third speaker who keeps the debate fair",
     "profile.moderator_on": "On (recommended)",
     "profile.moderator_off": "Off",
@@ -1353,10 +1354,11 @@ const extra = {
     "debate.score": "Score",
     "debate.stance.agree": "Strong point",
     "debate.stance.partially_agree": "Partly right",
-    "debate.stance.disagree": "Coach disagrees",
-    "debate.counter": "Coach's rebuttal",
+    "debate.stance.disagree": "Debater disagrees",
+    "debate.counter": "Debater's rebuttal",
     "debate.evidence": "The evidence",
     "debate.next": "Your challenge",
+    "debate.read_card": "Read my card",
     "debate.ack": "Good claim — nothing to rebut.",
     "debate.fallacies": "Fallacies",
     "debate.delivery": "Delivery",

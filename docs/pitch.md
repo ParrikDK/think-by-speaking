@@ -1,6 +1,6 @@
 # Think By Speaking — pitch
 
-> **One line:** a voice-first AI debate coach that makes you think by speaking — it knows you, it remembers you, and it always answers back.
+> **One line:** a voice-first AI debate debater that makes you think by speaking — it knows you, it remembers you, and it always answers back.
 
 ## Problem
 
@@ -15,9 +15,9 @@
 
 ## Solution
 
-A voice-first **debate coach** that opens like a show with **three speakers**:
+A voice-first **debate debater** that opens like a show with **three speakers**:
 a neutral **moderator (the host)** frames the motion and keeps the debate
-fair, a **coach** debates you — evidence, steelmanning, fallacy radar, and a
+fair, a **debater** debates you — evidence, steelmanning, fallacy radar, and a
 live score — and **you** speak your position.
 
 - **Framing phase** — the moderator defines the topic and the rules; no
@@ -25,7 +25,7 @@ live score — and **you** speak your position.
   statement earns no score
 - **Moderator, on by default (toggle off anytime)** — every second turn the
   moderator interjects, reading out the score and asking a clarifying
-  question; turn it off for a pure coach–you exchange
+  question; turn it off for a pure debater–you exchange
 - **Every turn comes back with a card:**
   - **What you said** — stance, running score, counter-argument, evidence
   - **Fallacy radar** — strawman, false dilemma, ad hominem, red herring…
@@ -34,7 +34,7 @@ live score — and **you** speak your position.
   - **How you sounded** — filler words (um/like), pace (words/sec), pitch
     (varied vs monotone)
   - **Modes** — Socratic, Heckler, Boardroom, Devil's advocate, Encouraging
-- **Voice picker** — British male by default; switch the coach's voice anytime
+- **Voice picker** — British male by default; switch the debater's voice anytime
 - **Spoken session recap** — the moderator reads out your scores and
   takeaways when the debate ends
 - **Voice-guided setup ("grandma mode")** — the moderator asks the setup
@@ -44,7 +44,7 @@ live score — and **you** speak your position.
 
 And it **remembers**: every debate feeds per-user analytics — score trends,
 fallacy patterns, filler counts — visible on the Progress screen. The more
-you debate, the sharper the coach gets.
+you debate, the sharper the debater gets.
 
 ## Demo script (2–3 minutes)
 
@@ -56,7 +56,7 @@ you debate, the sharper the coach gets.
    until the debate starts — so give me your position, plainly."* You say
    *"AI will replace teachers within five years."* No score card yet — the
    opening position statement earns no score.
-3. **Round one (25s):** the coach pushes back with evidence — the history
+3. **Round one (25s):** the debater pushes back with evidence — the history
    of automation waves, from agriculture to manufacturing. Your first score
    card lands at ~38, the **fallacy radar flags the overclaim** with your
    own words quoted, and the delivery chip counts your fillers.
@@ -65,7 +65,7 @@ you debate, the sharper the coach gets.
    from the waves we've survived before?"*
 5. **Adapt (25s):** answer with the taught fact — *"so it changes jobs
    instead of deleting them?"* → the score climbs, "Partly right". The
-   coach bends toward your profile — *"since you're into AI, let's steelman
+   debater bends toward your profile — *"since you're into AI, let's steelman
    the teachers' case…"*
 6. **Moderator, turn 4 (15s):** *"61 to you. One minute left — land your
    best point."*
@@ -84,7 +84,7 @@ you debate, the sharper the coach gets.
 - **Delivery analysis**: filler/pace/pitch on the voice path — measuring
   *how* you speak, not just what you say.
 - **The bundle**: voice-first + multilingual (31 debate languages) +
-  real rebuttal format + a three-speaker moderator/coach experience —
+  real rebuttal format + a three-speaker moderator/debater experience —
   hard to copy.
 
 ## Roadmap

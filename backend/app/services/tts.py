@@ -83,8 +83,8 @@ EN_VOICE_OPTIONS = [
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2}-[A-Za-z]+Neural$")
 
 # ── Debate host voice (v13, user-directed 2026-08-19): the moderator speaks
-# the intro in its own voice, then the coach takes over. en-only for v1 —
-# other languages fall back to the coach voice (no second speaker).
+# the intro in its own voice, then the debater takes over. en-only for v1 —
+# other languages fall back to the debater voice (no second speaker).
 MODERATOR_VOICES = {
     "en": "en-GB-SoniaNeural",  # British female host
 }

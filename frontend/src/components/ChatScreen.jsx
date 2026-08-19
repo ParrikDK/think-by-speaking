@@ -5,6 +5,7 @@ import VolumeMeter from './VolumeMeter';
 import useSileroVAD, { preloadVadAssets } from '../hooks/useSileroVAD';
 import { pickRecorderMime, recorderBlobType } from '../utils/recorder';
 import useAudioPlayback from '../hooks/useAudioPlayback';
+import { composeCardSpeech, speakHostLine } from './DebateCard';
 import { useT } from '../i18n/useI18n';
 
 export default function ChatScreen({
@@ -38,6 +39,10 @@ export default function ChatScreen({
   const [manualVolume, setManualVolume] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [micError, setMicError] = useState(null);
+  // v13.2 voice-first: auto-read each new feedback card with the host voice
+  const [voiceFirst, setVoiceFirst] = useState(false);
+  const wasVoiceFirstRef = useRef(false);
+  const spokenFeedbackRef = useRef(new Set()); // message ids whose card was already read
 
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -51,7 +56,7 @@ export default function ChatScreen({
     return audioCtxRef.current;
   }, []);
 
-  const { play, stop: stopAudio, isPlaying } = useAudioPlayback({
+  const { play, stop: stopAudio, isPlaying, isBuffering } = useAudioPlayback({
     audioContext: null, // created lazily on first play
     onBargeIn: bargeInRef,
     onEnded: endedRef,
@@ -82,6 +87,43 @@ export default function ChatScreen({
       }
     }
   }, [messages, handlePlay, playbackSpeed]);
+
+  // ── v13.2 voice-first: read feedback cards with the host voice ──
+  const speakCard = useCallback((feedback) => {
+    const text = composeCardSpeech(feedback, t);
+    if (!text) return;
+    speakHostLine(text, lang, { stop: stopAudio, play });
+  }, [t, lang, stopAudio, play]);
+
+  // Only cards that ARRIVE while the toggle is on are auto-read — cards
+  // already on screen when it flips on are marked as spoken so they don't
+  // all read out at once.
+  useEffect(() => {
+    if (voiceFirst && !wasVoiceFirstRef.current) {
+      const existing = new Set();
+      for (const m of messages) {
+        if (m.role === 'user' && m.feedback) existing.add(m.id);
+      }
+      spokenFeedbackRef.current = existing;
+    }
+    wasVoiceFirstRef.current = voiceFirst;
+  }, [voiceFirst, messages]);
+
+  // Speak each new feedback card once it lands. Delays until the tutor's
+  // reply audio has finished: isBuffering/isPlaying are set synchronously
+  // by useAudioPlayback, so a card that lands in the same commit as the
+  // tutor audio (complete payload) waits for the reply — the read never
+  // cuts the debater mid-sentence. A later tutor reply still barges an
+  // in-flight read (shared useAudioPlayback instance).
+  useEffect(() => {
+    if (!voiceFirst || isPlaying || isBuffering) return;
+    for (const m of messages) {
+      if (m.role === 'user' && m.feedback && !spokenFeedbackRef.current.has(m.id)) {
+        spokenFeedbackRef.current.add(m.id);
+        speakCard(m.feedback);
+      }
+    }
+  }, [messages, voiceFirst, isPlaying, isBuffering, speakCard]);
 
   // R3: VAD maxDurationReached recovery — toggle hands-free off/on to restart VAD
   const handleVADRestart = useCallback(() => {
@@ -251,6 +293,14 @@ export default function ChatScreen({
           </div>
         </div>
         <span className="topbar-spacer" />
+        <button
+          className={`topbar-btn ${voiceFirst ? 'topbar-btn-active' : ''}`}
+          onClick={() => setVoiceFirst((v) => !v)}
+          aria-pressed={voiceFirst}
+          title={t('chat.voice_first', 'Voice-first')}
+        >
+          🔊 {t('chat.voice_first', 'Voice-first')}
+        </button>
         {user && (
           <>
             <button className="topbar-btn" onClick={() => onNavigate('history')}>{t('chat.history')}</button>

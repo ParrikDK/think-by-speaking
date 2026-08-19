@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import useRealtime from '../hooks/useRealtime';
-import DebateCard from './DebateCard';
+import useAudioPlayback from '../hooks/useAudioPlayback';
+import DebateCard, { composeCardSpeech, speakHostLine } from './DebateCard';
 import { useT } from '../i18n/useI18n';
 import './RealtimeChatScreen.css';
 
@@ -82,6 +83,30 @@ export default function RealtimeChatScreen({
   onLoginRequest,
 }) {
   const t = useT(lang);
+  // v13.2 voice-first: auto-read each new feedback card with the host voice
+  const [voiceFirst, setVoiceFirst] = useState(false);
+  const voiceFirstRef = useRef(false); // read at WS-event time by useRealtime's speak callback
+  const speakCardRef = useRef(null);   // stable ref — the engine closure in useRealtime captures it once
+  const { play: cardPlay, stop: cardStop } = useAudioPlayback({}); // card reads are plain <audio>
+
+  // Keep the engine's speakCardRef.current fresh: the proxy.feedback
+  // handler calls it (checking the toggle at event time), and playback
+  // goes through the shared card-read controller in DebateCard (barge-in).
+  useEffect(() => {
+    speakCardRef.current = (feedback) => {
+      if (!voiceFirstRef.current) return; // toggle off → cards stay screen-only
+      const text = composeCardSpeech(feedback, t);
+      if (!text) return;
+      speakHostLine(text, lang, { stop: cardStop, play: cardPlay });
+    };
+  }, [t, lang, cardStop, cardPlay]);
+
+  const handleVoiceFirst = () => {
+    const next = !voiceFirst;
+    voiceFirstRef.current = next;
+    setVoiceFirst(next);
+  };
+
   const rt = useRealtime({
     lang: targetLang.code,
     level: level || 'beginner',
@@ -89,6 +114,7 @@ export default function RealtimeChatScreen({
     native: nativeLang?.code || 'en',
     profile,
     voice,
+    speakCardRef,
   });
   const { mode, pttDown, pttRelease, pttSetCancel } = rt;
 
@@ -192,6 +218,15 @@ export default function RealtimeChatScreen({
           </div>
         </div>
         <span className="topbar-spacer" />
+        <button
+          type="button"
+          className={`rt-mini ${voiceFirst ? 'rt-mini-active' : ''}`}
+          aria-pressed={voiceFirst}
+          title={t('chat.voice_first', 'Voice-first')}
+          onClick={handleVoiceFirst}
+        >
+          🔊 {t('chat.voice_first', 'Voice-first')}
+        </button>
         <button
           type="button"
           className={`rt-mini ${mode === 'handsfree' ? 'rt-mini-active' : ''}`}

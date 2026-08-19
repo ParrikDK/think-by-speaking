@@ -79,7 +79,7 @@ function makeWav(pcmBytes, sampleRate) {
   return buf;
 }
 
-export default function useRealtime({ lang, level, scenarioId, native, profile, voice }) {
+export default function useRealtime({ lang, level, scenarioId, native, profile, voice, speakCardRef }) {
   // Params are fixed for a mounted screen; the ref keeps the engine
   // closures (created once) reading the latest values regardless.
   const paramsRef = useRef({ lang, level, scenarioId, native, profile, voice });
@@ -422,16 +422,25 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
         case 'proxy.feedback': {
           const rec = turnRegistryRef.current.get(ev.turn);
           if (rec && rec.userId != null) {
-            updateMessage(rec.userId, {
-              feedback: {
-                stance: ev.stance || 'partially_agree',
-                score: Number(ev.score) || 50,
-                score_delta: Number(ev.score_delta) || 0,
-                counter: ev.counter || '',
-                evidence: ev.evidence || '',
-                next: ev.next || '',
-              },
-            });
+            const feedback = {
+              stance: ev.stance || 'partially_agree',
+              score: Number(ev.score) || 50,
+              score_delta: Number(ev.score_delta) || 0,
+              counter: ev.counter || '',
+              evidence: ev.evidence || '',
+              next: ev.next || '',
+            };
+            updateMessage(rec.userId, { feedback });
+            // v13.2 voice-first: auto-read the card the moment it lands.
+            // speakCardRef (stable ref supplied by the screen) holds the
+            // latest speak function — it checks the voice-first toggle
+            // and plays via the shared card-read controller in DebateCard,
+            // so a new read barges any previous one. Mirror RtBubble:
+            // only speak when a real card (rebuttal/evidence) renders,
+            // not the light ack.
+            if ((feedback.counter || feedback.evidence) && speakCardRef?.current) {
+              speakCardRef.current(feedback);
+            }
           }
           break;
         }

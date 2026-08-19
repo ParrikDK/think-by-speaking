@@ -199,7 +199,7 @@ export async function hostLine(text, language = 'en') {
   return res.json(); // {audio_base64}
 }
 
-/** Spoken session recap (v13.1): one coach turn over the whole session. */
+/** Spoken session recap (v13.1): one debater turn over the whole session. */
 export async function summaryChat(sessionId, language) {
   const form = new FormData();
   form.append('session_id', sessionId);

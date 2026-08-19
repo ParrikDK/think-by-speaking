@@ -1,14 +1,14 @@
 # Think By Speaking — think by speaking
 
-A voice-first AI **debate coach**. Pick a subject ("Is social media bad for
+A voice-first AI **debate debater**. Pick a subject ("Is social media bad for
 society?", "Will AI take our jobs?", or any topic you bring), then argue
-back and forth with a coach that pushes back with evidence, teaches the
+back and forth with a debater that pushes back with evidence, teaches the
 thinking inside every rebuttal, and scores your debate — personalized to
 your interests and debate style.
 
 **The problem:** you think best by debating out loud, but nobody argues
 back. Social media blocks you, echo chambers agree with you, and generic
-advice doesn't know you. **The fix:** a coach that knows your interests
+advice doesn't know you. **The fix:** a debater that knows your interests
 and always has to answer.
 
 **Stack:** FastAPI + SQLite (aiosqlite) · React 18 + Vite · DeepSeek (LLM) ·
@@ -56,8 +56,8 @@ python -m pytest              # unit + API tests (external services mocked)
 |---|---|
 | `ELEVENLABS_API_KEY` | Speech-to-text (Scribe v2) + TTS (primary for Cantonese/Mandarin, fallback otherwise) |
 | `ELEVENLABS_PRIMARY_LANGUAGES` | Comma-separated languages that use ElevenLabs TTS first (default empty = Edge-TTS everywhere) |
-| `DEEPSEEK_API_KEY` | Debate coach LLM (OpenAI-compatible API) |
-| `DEEPSEEK_MODEL` | Optional, default `deepseek-v4-pro` (coach turns) |
+| `DEEPSEEK_API_KEY` | Debate debater LLM (OpenAI-compatible API) |
+| `DEEPSEEK_MODEL` | Optional, default `deepseek-v4-pro` (debater turns) |
 | `DEEPSEEK_MODEL_FAST` | Optional, default `deepseek-v4-flash` (cheap internal calls, e.g. feedback card) |
 | `DASHSCOPE_API_KEY` | **Required for hands-free mode** — Qwen realtime speech-to-speech bridge; without it `/api/realtime/ws` errors |
 | `ALLOWED_ORIGINS` | CORS origins, comma-separated |
@@ -78,17 +78,17 @@ volume under Docker.
 
 ## Features
 
-- ⚔️ **Three-speaker debate**: a neutral **moderator** frames the motion and keeps the debate fair, then a **coach** argues back — evidence, steelmanning, fallacy radar, and a live score — while you speak
+- ⚔️ **Three-speaker debate**: a neutral **moderator** frames the motion and keeps the debate fair, then a **debater** argues back — evidence, steelmanning, fallacy radar, and a live score — while you speak
 - 🎬 **Framing phase**: the moderator defines the topic and rules before any scoring — your opening position statement earns no score
-- ⚖️ **Moderator on by default**: interjects on every second turn, reading out scores and asking clarifying questions — toggle it off for a pure coach–you exchange
+- ⚖️ **Moderator on by default**: interjects on every second turn, reading out scores and asking clarifying questions — toggle it off for a pure debater–you exchange
 - 📈 **Debate scoring**: every turn earns a score card — stance, counter-argument, one piece of evidence, next challenge
-- 🎯 **Personalized to you**: your interests and debate style (devil's advocate / Socratic / encouraging) shape every session — the coach's examples, stakes, and challenges bend toward you
+- 🎯 **Personalized to you**: your interests and debate style (devil's advocate / Socratic / encouraging) shape every session — the debater's examples, stakes, and challenges bend toward you
 - 🗣️ **Voice-first**: speak your arguments — real-time speech-to-text, natural voice replies, replay at 0.5× / 1× / 2×
-- 🎤 **Voice picker**: pick the coach's voice — British male by default, switch anytime
+- 🎤 **Voice picker**: pick the debater's voice — British male by default, switch anytime
 - 🎙️ **Hands-free mode**: on-device Silero VAD auto-detects end of speech, barge-in support — runs on the Qwen realtime speech-to-speech bridge (26 of the 31 languages; the rest fall back to the cascade engine)
 - 🔁 **Spoken session recap**: the moderator reads out your scores and takeaways when the debate ends
 - 🗺️ **Voice-guided setup ("grandma mode")**: the moderator asks the setup questions — nothing to read, no forms to fill
 - 💾 **Guest device memory**: debates as a guest are remembered on your device, ready to sync to an account
-- ⌨️ **Typed input mode** — text chat with the same coach
+- ⌨️ **Typed input mode** — text chat with the same debater
 - 👤 Optional accounts: session history, resume, progress dashboard, streaks
 - 🌍 31 debate languages, UI translated into 28 languages

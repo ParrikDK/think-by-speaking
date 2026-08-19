@@ -46,7 +46,7 @@ def normalize_feedback_card(data: dict) -> dict:
 
 _SYSTEM = (
     "You are a debate judge and fact-checker for a general debate. You are "
-    "given the learner's claim, the coach's reply, and recent turns of the "
+    "given the learner's claim, the debater's reply, and recent turns of the "
     "conversation. Judge the learner's claim against evidence and logic. "
     "Respond with JSON only: "
     "{{\"stance\": \"agree\"|\"partially_agree\"|\"disagree\", "

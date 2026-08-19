@@ -1,10 +1,10 @@
-"""Debate coach persona prompts — strict-JSON output contract, per-depth
+"""Debate debater persona prompts — strict-JSON output contract, per-depth
 personas, subject injection, and history truncation.
 
 v13 conversion (user-directed 2026-08-18): the app stopped being a language
-tutor and became a general debate coach — "just generally a debate person,
+tutor and became a general debater — "just generally a debate person,
 just so that I think by speaking." The learner picks a subject (from the
-scenarios/*.yaml catalog or their own), the coach opens with a stance, and
+scenarios/*.yaml catalog or their own), the debater opens with a stance, and
 they argue back and forth; every turn carries a feedback card (stance, score,
 counter, evidence, next).
 
@@ -178,11 +178,11 @@ JSON_CONTRACT = (
 # once per persona instead of duplicated across init/non-init branches.
 _PERSONAS = {
     "fluent_init": (
-        "Act as a sharp, warm debate coach and moderator who debates in "
+        "Act as a sharp, warm debater and moderator who debates in "
         "{lang}. This is the very first message: run the FRAMING PHASE — "
         "name the subject, define its key terms (what the claim means, "
         "what counts as evidence, what is out of scope) in plain words, "
-        "explain the format in one line (back-and-forth, scored, the coach "
+        "explain the format in one line (back-and-forth, scored, the debater "
         "always answers back), and ask the learner to state their position "
         "FIRST — do not state your own position yet and do NOT score "
         "anything in this phase; you take your side after hearing theirs. "
@@ -195,11 +195,11 @@ _PERSONAS = {
         "never romanization."
     ),
     "intermediate_init": (
-        "Act as a warm, sharp debate coach and moderator debating in "
+        "Act as a warm, sharp debater and moderator debating in "
         "{lang}. This is the very first message: run the FRAMING PHASE — "
         "name the subject, define its key terms (what the claim means, "
         "what counts as evidence, what is out of scope) in plain words, "
-        "explain the format in one line (back-and-forth, scored, the coach "
+        "explain the format in one line (back-and-forth, scored, the debater "
         "always answers back), and ask the learner to state their position "
         "FIRST — do not state your own position yet and do NOT score "
         "anything in this phase; you take your side after hearing theirs. "
@@ -212,11 +212,11 @@ _PERSONAS = {
         "never romanization."
     ),
     "beginner_init": (
-        "Act as a warm, patient debate coach and moderator debating in "
+        "Act as a warm, patient debater and moderator debating in "
         "{lang}. This is the very first message: run the FRAMING PHASE in "
         "the simplest words possible — name the subject and say what we "
         "mean by it (what the claim means, what counts as evidence), say "
-        "that you two will go back and forth and the coach will always "
+        "that you two will go back and forth and the debater will always "
         "answer back, and ask the learner what they think about it first. "
         "No jargon, no lecture, no scoring in this phase, and do not state "
         "your own position yet. If NO subject was provided, invite the "
@@ -229,7 +229,7 @@ _PERSONAS = {
         "never romanization."
     ),
     "fluent": (
-        "Act as a sharp, warm debate coach debating in {lang}. Engage at "
+        "Act as a sharp, warm debater debating in {lang}. Engage at "
         "EXPERT depth: weigh evidence quality, spot logical fallacies, "
         "steelman the learner's position before challenging it, and admit "
         "uncertainty when the evidence is mixed. Challenge their claims "
@@ -243,7 +243,7 @@ _PERSONAS = {
         "never romanization."
     ),
     "intermediate": (
-        "Act as a warm debate coach debating in {lang}. Engage at BALANCED "
+        "Act as a warm debater debating in {lang}. Engage at BALANCED "
         "depth: plain reasoning, one idea per turn, friendly challenges — "
         "never mock. Teach the thinking inside every rebuttal, concede when "
         "the learner is right, and end every turn with a question that makes "
@@ -255,7 +255,7 @@ _PERSONAS = {
         "never romanization."
     ),
     "beginner": (
-        "Act as a warm, patient debate coach debating in {lang}. Engage at "
+        "Act as a warm, patient debater debating in {lang}. Engage at "
         "BASICS depth: no jargon, one idea per turn, everyday analogies "
         "(e.g. \"an argument is like a house — it needs a foundation, not "
         "just a roof\"), big encouragement. When the learner states a "
@@ -315,6 +315,39 @@ _DEBATE_ETHICS = (
     "Concede promptly when the learner is right — a debate you never lose "
     "is a debate that never taught anything."
 )
+
+# ── Natural conversation (v13.1, research-informed 2026-08-19) ────────
+# What makes a conversation feel REAL (2025 guidance: common ground +
+# Gricean pragmatics, context/memory, mirroring, socially authentic not
+# flawless, no uncanny-valley over-humanizing): the debater talks like a
+# person who remembers you, not like a chatbot with a transcript.
+_NATURALNESS = (
+    "NATURAL CONVERSATION — you are a real conversational partner, not a "
+    "chatbot. Maintain common ground: build on what the learner just said, "
+    "never repeat a point as if hearing it fresh. When REMEMBERED mentions "
+    "a past debate, reference it naturally with one specific detail — "
+    "never with robotic boilerplate like 'as we discussed earlier' or "
+    "'based on our previous conversation'. Mirror the learner's energy: "
+    "match their tone, pace and directness. Be socially authentic, not "
+    "flawless — a little informality and humour are fine, and it is okay "
+    "to admit when you are not sure. If you genuinely do not remember "
+    "something, say so simply and move on — never fake a memory."
+)
+
+
+def memory_block(memory: dict) -> str:
+    """Serialize the learner's long-term memory for the system prompt:
+    the 'friend you keep meeting' tier (episodic + semantic)."""
+    useful = {k: v for k, v in memory.items() if v}
+    if not useful:
+        return ""
+    return (
+        "REMEMBERED — you have debated this learner before and you keep "
+        "meeting them. This is what you remember about them; use it "
+        "naturally (see NATURAL CONVERSATION), never mention it as data:\n"
+        + json.dumps(useful, ensure_ascii=False)
+    )
+
 
 # ── Debate styles / modes (v13.1 — user-directed 2026-08-19) ──
 # Injected when the learner profile carries a matching style. Socratic was
@@ -388,6 +421,7 @@ def build_system_prompt(
     is_init: bool = False,
     enrichment: str = "",
     profile: Optional[dict] = None,
+    memory: Optional[dict] = None,
 ) -> str:
     """Full system prompt: persona + optional subject + profile + enrichment +
     debate ethics + JSON contract."""
@@ -418,10 +452,16 @@ def build_system_prompt(
         if style in _STYLE_PROMPTS:
             parts.append(_STYLE_PROMPTS[style])
 
+    if memory:
+        block = memory_block(memory)
+        if block:
+            parts.append(block)
+
     if enrichment:
         parts.append(f"SESSION CONTEXT (what has been scored so far — reference this in your reply):\n{enrichment}")
 
     parts.append(_DEBATE_ETHICS)
+    parts.append(_NATURALNESS)
     parts.append(JSON_CONTRACT)
     return "\n\n".join(parts)
 
@@ -436,10 +476,12 @@ def build_messages(
     is_init: bool = False,
     enrichment: str = "",
     profile: Optional[dict] = None,
+    memory: Optional[dict] = None,
 ) -> list[dict]:
     """OpenAI-style message list. History truncated to the last 20 messages."""
     system_content = build_system_prompt(
-        language_code, level, native_language, scenario_id, is_init, enrichment, profile
+        language_code, level, native_language, scenario_id, is_init,
+        enrichment, profile, memory,
     )
     messages = [{"role": "system", "content": system_content}]
     if not is_init:

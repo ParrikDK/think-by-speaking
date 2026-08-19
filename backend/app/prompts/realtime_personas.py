@@ -1,6 +1,6 @@
 """Realtime voice personas — per-language voice rules + depth personas.
 
-v13 (2026-08-18): converted from language-tutor to debate-coach personas
+v13 (2026-08-18): converted from language-tutor to debater personas
 (user-directed: "just generally a debate person, just so that I think by
 speaking"). Per-language variety pinning, voices and VAD patience are kept;
 the persona identity and level tiers are debate-flavored. Post-turn debate
@@ -9,7 +9,7 @@ feedback cards come from services/grammar.py.
 Voice rules are short and speech-only (no JSON contract — the debate
 happens inline in speech, and post-turn feedback cards come from
 services/grammar.py). Level silence values are the VAD patience ported
-from the spike: beginners pause mid-sentence, so the coach waits longer
+from the spike: beginners pause mid-sentence, so the debater waits longer
 before taking the turn.
 
 Voices: preset names from the official qwen3.5-omni realtime voice table
@@ -59,12 +59,12 @@ def voice_for(lang: str) -> str:
 
 
 # ── Debate host voice (v13, user-directed 2026-08-19): the moderator opens
-# the debate in its own voice, then hands over to the coach after turn 1
+# the debate in its own voice, then hands over to the debater after turn 1
 # (the bridge sends a mid-session session.update voice switch — verified
 # against the upstream 2026-08-19). en-only for v1; both presets verified
 # to produce speech (see voices.py docstring for the verification method).
 REALTIME_MODERATOR_VOICES = {
-    "en": "Jennifer",  # British/American female host; coach defaults to Ethan
+    "en": "Jennifer",  # British/American female host; debater defaults to Ethan
 }
 
 
@@ -85,7 +85,7 @@ def _base_rules(lang: str, native_name: str) -> str:
     if lang == "yue":
         # Ported verbatim from the spike (live-tested), native generalized.
         return (
-            "You are a warm, sharp debate coach speaking Hong Kong Cantonese "
+            "You are a warm, sharp debater speaking Hong Kong Cantonese "
             "(廣東話). ALWAYS speak Hong Kong Cantonese — casual spoken HK "
             "style, never Mandarin (普通话), never written Chinese register. "
             "Never switch varieties, even if the learner switches first. Speak "
@@ -93,7 +93,7 @@ def _base_rules(lang: str, native_name: str) -> str:
         )
     if lang == "zh":
         return (
-            "You are a warm, sharp debate coach speaking Standard Mandarin "
+            "You are a warm, sharp debater speaking Standard Mandarin "
             "(普通话). ALWAYS speak Standard Mandarin — casual spoken style, never "
             "Cantonese (廣東話) or any other dialect, never written/formal "
             "register. Never switch varieties, even if the learner switches "
@@ -101,7 +101,7 @@ def _base_rules(lang: str, native_name: str) -> str:
         )
     if lang == "zh-TW":
         return (
-            "You are a warm, sharp debate coach speaking Taiwan Mandarin "
+            "You are a warm, sharp debater speaking Taiwan Mandarin "
             "(繁體中文). ALWAYS speak Taiwan Mandarin — casual spoken style, never "
             "Cantonese (廣東話) or any other dialect, never written/formal "
             "register. Never switch varieties, even if the learner switches "
@@ -109,12 +109,12 @@ def _base_rules(lang: str, native_name: str) -> str:
         )
     if lang == "en":
         return (
-            "You are a warm, sharp debate coach. ALWAYS speak English; never "
+            "You are a warm, sharp debater. ALWAYS speak English; never "
             "switch to any other language."
         )
     name = LANGUAGE_NAMES.get(lang, lang)
     return (
-        f"You are a warm, sharp debate coach speaking {name}. ALWAYS speak "
+        f"You are a warm, sharp debater speaking {name}. ALWAYS speak "
         f"{name} — casual, natural spoken register, how native friends "
         "actually talk, never stiff or written style. Never switch to any "
         "other language or regional variety, even if the learner switches "
@@ -175,7 +175,7 @@ def build_instructions(
     """Full `instructions` value for the realtime session.update:
     language voice rules + depth persona + optional subject injection +
     optional learner profile. `continuation` marks a session-cap rollover
-    reconnect (v11 M2): the conversation is already underway, so the coach
+    reconnect (v11 M2): the conversation is already underway, so the debater
     must not greet again."""
     if level not in VALID_LEVELS:
         raise ValueError(f"Invalid level: {level!r} (expected one of {VALID_LEVELS})")

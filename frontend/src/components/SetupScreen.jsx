@@ -11,7 +11,7 @@ const LEVELS = ['beginner', 'intermediate', 'fluent'];
 const POPULAR_LEARN = ['zh', 'yue', 'en'];
 
 // v13: the learner profile — the personalization moat. Interests shape the
-// coach's examples and subject suggestions; style shapes how hard it pushes.
+// debater's examples and subject suggestions; style shapes how hard it pushes.
 const INTERESTS = ['tech', 'health', 'money', 'society', 'education', 'sports', 'politics', 'arts'];
 const STYLES = ['devils_advocate', 'socratic', 'heckler', 'boardroom', 'encouraging'];
 
@@ -142,7 +142,7 @@ export default function SetupScreen({
           </div>
         </section>
 
-        {/* Coach voice (v13, user-directed 2026-08-18): pick from the
+        {/* Debater voice (v13, user-directed 2026-08-18): pick from the
             options matching the session kind — realtime sessions can only
             use qwen presets, cascade sessions edge/elevenlabs voices.
             Hidden when only one option. */}

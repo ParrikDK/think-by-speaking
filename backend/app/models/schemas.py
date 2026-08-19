@@ -38,7 +38,7 @@ class AuthResponse(BaseModel):
     user: UserOut
 
 
-# ── Turn payload (the coach's half of a turn) ───────────────────────
+# ── Turn payload (the debater's half of a turn) ─────────────────────
 
 class DebateFeedback(BaseModel):
     """Post-turn debate card: stance on the learner's claim, running score,

@@ -660,7 +660,7 @@ def test_audio_metrics_become_delivery(client, mock_services, monkeypatch):
 
 
 def test_spoken_summary_endpoint(client, mock_services, monkeypatch):
-    """v13.1 spoken recap: /chat/summary returns a spoken coach turn over
+    """v13.1 spoken recap: /chat/summary returns a spoken debater turn over
     the session history."""
     async def fake_fast(messages):
         return "You finished at 54 — your steelman of the junior-staff point was strong, but you leaned on a false dilemma early on. Next time: name your evidence first."
@@ -694,7 +694,7 @@ def test_moderator_interjection_on_even_turns(client, mock_services, monkeypatch
     """v13.1 moderator (default ON): the 2nd user turn gets a neutral
     interjection with host-voice audio; the 1st does not."""
     async def fake_fast(messages):
-        return "The coach owes you a steelman there."
+        return "The debater owes you a steelman there."
 
     monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
     session_id = _init(client, language="en")["session_id"]
@@ -710,7 +710,7 @@ def test_moderator_interjection_on_even_turns(client, mock_services, monkeypatch
 
 def test_moderator_can_be_disabled_in_profile(client, mock_services, monkeypatch):
     async def fake_fast(messages):
-        return "The coach owes you a steelman there."
+        return "The debater owes you a steelman there."
 
     monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
     import json as _j

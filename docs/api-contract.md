@@ -33,7 +33,7 @@ Passwords: PBKDF2-HMAC-SHA256 (stdlib hashlib, 100k iterations, per-user salt). 
 
 ### GET /api/scenarios?language=zh
 → `[{ "id": "social-media", "title": "Is Social Media Bad for Society?", "description": "...", "icon": "📱" }, ...]`
-Loaded from `app/prompts/scenarios/*.yaml`. v13: the scenario catalog is now **debate subjects** (the schema is unchanged; the `prompt` holds the coach's opening stance). Ship 9: social-media, ai-future, remote-work, money-happiness, school-start, free-will, zoos, gaming, voting. Empty selection = free debate. Language param reserved; return all.
+Loaded from `app/prompts/scenarios/*.yaml`. v13: the scenario catalog is now **debate subjects** (the schema is unchanged; the `prompt` holds the debater's opening stance). Ship 9: social-media, ai-future, remote-work, money-happiness, school-start, free-will, zoos, gaming, voting. Empty selection = free debate. Language param reserved; return all.
 
 ### POST /api/chat/init  (multipart form)
 Fields: `language` (debate language code), `native_language` (code), `level`, `scenario_id` (optional, empty string = free debate), `voice_id` (optional), `profile` (optional; JSON-encoded learner profile `{interests, style}`, ≤4 KB, malformed dropped, oversized → 422).
@@ -50,7 +50,7 @@ SSE stream of events: `event: token  data: {"text": "..."}` (REAL streamed LLM t
 ### TurnPayload
 ```
 {
-  "text": "...",               // coach's spoken counter-argument in the debate language
+  "text": "...",               // debater's spoken counter-argument in the debate language
   "translation": "...",        // in user's native language ("" when the reply is already in it)
   "feedback": { "stance": "agree"|"partially_agree"|"disagree",
                 "score": 0-100, "score_delta": -8..8,
@@ -86,7 +86,7 @@ mirror this shape client-side per device (localStorage).
 ### GET /api/voices?language=zh → `[{voice_id, name, provider}]` — actually filter: per-language default ElevenLabs voice + Edge voices for edge languages; hardcoded table is fine, no live ElevenLabs call needed.
 
 ## LLM (DeepSeek, OpenAI-compatible, base https://api.deepseek.com, model from env DEEPSEEK_MODEL default `deepseek-v4-pro`; cheap internal calls use DEEPSEEK_MODEL_FAST default `deepseek-v4-flash`)
-v13: debate-coach personas in `prompts/tutor.py` (depth tiers Basics/Balanced/Expert over the legacy level values). LLM returns strict JSON: `{reply, translation, feedback: {stance, score, score_delta, counter, evidence, next}|null}`. `feedback` is null ONLY on the first greeting; every debate turn gets one. The reply is spoken in the session's debate language (replies in the learner's native language when they write in it). Conversation history truncated to last 20 messages; the learner profile (`profile` JSON from init/ws) is injected into the system prompt when present — the personalization moat. Subject prompt injected when scenario_id set. Real streaming via `stream=True` for /chat/stream. Retry 3x with tenacity; on failure return a canned localized apology payload. Language-drift nudge: one cheap reply-only regeneration (`max_tokens=200`) when the reply script mismatches the learner's message.
+v13: debate-debater personas in `prompts/tutor.py` (depth tiers Basics/Balanced/Expert over the legacy level values). LLM returns strict JSON: `{reply, translation, feedback: {stance, score, score_delta, counter, evidence, next}|null}`. `feedback` is null ONLY on the first greeting; every debate turn gets one. The reply is spoken in the session's debate language (replies in the learner's native language when they write in it). Conversation history truncated to last 20 messages; the learner profile (`profile` JSON from init/ws) is injected into the system prompt when present — the personalization moat. Subject prompt injected when scenario_id set. Real streaming via `stream=True` for /chat/stream. Retry 3x with tenacity; on failure return a canned localized apology payload. Language-drift nudge: one cheap reply-only regeneration (`max_tokens=200`) when the reply script mismatches the learner's message.
 
 ## STT: ElevenLabs Scribe v2 (`scribe_v2`) via httpx, 1 retry.
 ## TTS chain: Edge-TTS is the PRIMARY provider for every language (native voice for all 31). ElevenLabs `eleven_v3` → `eleven_multilingual_v2` runs only as a fallback when edge fails (and the key is set), then edge is retried once more. EXCEPTION — languages in `ELEVENLABS_PRIMARY_LANGUAGES` (currently yue/zh/zh-TW): ElevenLabs runs FIRST, edge-tts is their fallback. Speed by level: all 1.0 (natural speed). NO SSML sent to ElevenLabs.

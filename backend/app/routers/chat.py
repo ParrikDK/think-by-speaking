@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from ..config import get_settings
-from ..db import stats_store
+from ..db import memory_store, stats_store
 from ..db.session_store import SessionData, session_store
 from ..db.user_store import User
 from ..models.schemas import (
@@ -223,7 +223,7 @@ def _history_for_llm(session: SessionData) -> list[dict]:
     return [{"role": m["role"], "content": m["text"]} for m in session.messages]
 
 
-async def _moderator_line(user_text: str, coach_reply: str, score: int | None, lang: str) -> str:
+async def _moderator_line(user_text: str, debater_reply: str, score: int | None, lang: str) -> str:
     """One short neutral moderator interjection after a scored exchange
     (v13.1): a clarifying question, a fairness call, or a score read-out.
     Never takes sides. Cheap fast-model call; best-effort ('' on failure)."""
@@ -231,11 +231,11 @@ async def _moderator_line(user_text: str, coach_reply: str, score: int | None, l
         "You are the neutral debate moderator. React to this exchange in "
         "ONE short spoken line (max 2 sentences, in the same language as "
         "the exchange): either ask the learner a clarifying question, call "
-        "out unfairness (e.g. 'the coach owes you a steelman there'), or "
+        "out unfairness (e.g. 'the debater owes you a steelman there'), or "
         "read the score ('that brings it to 54 for you'). Never take "
         "sides, never argue. Reply with ONLY the line."
     )
-    parts = [f'Learner said: "{user_text}"', f'Coach replied: "{coach_reply}"']
+    parts = [f'Learner said: "{user_text}"', f'Debater replied: "{debater_reply}"']
     if score is not None:
         parts.append(f"Current learner score: {score}")
     try:
@@ -342,15 +342,16 @@ async def chat_init(
     )
     if user:
         await stats_store.record_session_created(user.id)
+    memory = await memory_store.load_memory(user.id) if user else None
 
     messages = build_messages(
         language, level, [], "",
         native_language=native_language, scenario_id=scenario, is_init=True,
-        profile=profile_data,
+        profile=profile_data, memory=memory,
     )
     payload = await llm.chat_json(messages, language, native_language=session.native_language)
     # v13 moderator: the greeting is spoken by the debate host (separate
-    # voice when the language has one), the debate itself by the coach.
+    # voice when the language has one), the debate itself by the debater.
     moderator_id = tts.moderator_voice(language) or session.voice_id
     turn = await _build_turn(payload, language, moderator_id, level)
 
@@ -385,10 +386,11 @@ async def chat_turn(
         return ChatResponse(session_id=session_id, user_text="", reply=turn, error_type="silence")
 
     enrichment = _enrichment_context(session)
+    memory = await memory_store.load_memory(session.user_id) if session.user_id else None
     messages = build_messages(
         language, session.level, _history_for_llm(session), user_text,
         native_language=session.native_language, scenario_id=session.scenario_id,
-        enrichment=enrichment,
+        enrichment=enrichment, profile=session.profile, memory=memory,
     )
     payload = await llm.chat_json(messages, language, native_language=session.native_language)
     if _needs_nudge(session.level, user_text, payload):
@@ -457,8 +459,8 @@ async def chat_summary(
     """Spoken session recap (v13.1): one LLM pass over the full session
     producing a warm 3-4 sentence summary — final score, strongest point,
     fallacies leaned on, one improvement. Returns a TurnPayload WITH audio,
-    spoken by the coach. Mirrors the post-session dashboard pattern of
-    Yoodli / Microsoft Speaker Coach, but spoken."""
+    spoken by the debater. Mirrors the post-session dashboard pattern of
+    Yoodli / Microsoft Speaker Debater, but spoken."""
     _validate_language(language)
     session = await session_store.get_or_load(session_id)
     if session is None:
@@ -471,7 +473,7 @@ async def chat_summary(
         {
             "role": "system",
             "content": (
-                "You are the debate coach closing a session. The debate is over. "
+                "You are the debater closing a session. The debate is over. "
                 "Speak a warm, concise summary of 3-4 sentences in the same "
                 "language the learner used most recently: their final score, their "
                 "strongest point, any fallacies they leaned on (name them), and ONE "
@@ -488,6 +490,10 @@ async def chat_summary(
         {"reply": llm.strip_markdown(text), "translation": "", "feedback": None},
         language, session.voice_id, session.level,
     )
+    # v13.1 long-term memory: merge this session into the user's memory
+    # (best-effort background task — the recap plays while it runs).
+    if session.user_id:
+        asyncio.create_task(consolidate_memory(session.user_id, history))
     return {"reply": turn}
 
 
@@ -542,10 +548,11 @@ async def chat_turn_stream(
             return
 
         enrichment = _enrichment_context(session)
+        memory = await memory_store.load_memory(session.user_id) if session.user_id else None
         messages = build_messages(
             language, session.level, _history_for_llm(session), user_text,
             native_language=session.native_language, scenario_id=session.scenario_id,
-            enrichment=enrichment,
+            enrichment=enrichment, profile=session.profile, memory=memory,
         )
         payload: dict | None = None
         llm_failed = False
