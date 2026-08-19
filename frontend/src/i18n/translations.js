@@ -60,6 +60,7 @@ const translations = {
     // MessageBubble
     "bubble.you": "you",
     "bubble.tutor": "coach",
+    "bubble.moderator": "moderator",
     "bubble.replay": "replay",
     "bubble.speed_0-7x": "0.7x",
     "bubble.speed_1x": "1x",
@@ -1330,6 +1331,9 @@ const extra = {
     "profile.desc": "The coach personalizes every debate to you — your interests, your style.",
     "profile.interests": "What do you care about?",
     "profile.style": "How should the coach push back?",
+    "profile.moderator": "Moderator — a neutral third speaker who keeps the debate fair",
+    "profile.moderator_on": "On (recommended)",
+    "profile.moderator_off": "Off",
     "profile.skip": "Skip for now",
     "profile.interest.tech": "Tech & AI",
     "profile.interest.health": "Health & fitness",

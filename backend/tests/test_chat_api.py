@@ -95,8 +95,17 @@ def test_text_chat_turn_skips_stt(client, mock_services, monkeypatch):
     assert body["user_text"] == "Je suis bien"
     reply = body["reply"]
     assert reply["text"] == FAKE_PAYLOAD["reply"]
-    assert reply["feedback"]["stance"] == "partially_agree"
+    # v13.1 framing phase: the first turn (position statement) carries no card
+    assert reply["feedback"] is None
     assert mock_services["stt"] == 0  # typed text → no STT call
+
+    # The SECOND turn starts the scored debate.
+    r2 = client.post(
+        "/api/chat",
+        data={"session_id": session_id, "language": "fr", "text": "AI will replace teachers."},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["reply"]["feedback"]["stance"] == "partially_agree"
 
 
 def test_fillers_counted_on_spoken_turns(client, mock_services, monkeypatch):
@@ -116,12 +125,14 @@ def test_fillers_counted_on_spoken_turns(client, mock_services, monkeypatch):
 
     monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
     session_id = _init(client, language="en")["session_id"]
-    r = client.post(
-        "/api/chat",
-        data={"session_id": session_id, "language": "en"},
-        files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
-    )
-    assert r.status_code == 200, r.text
+    # turn 1 = framing (no card); turn 2 starts the scored debate
+    for _ in range(2):
+        r = client.post(
+            "/api/chat",
+            data={"session_id": session_id, "language": "en"},
+            files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
+        )
+        assert r.status_code == 200, r.text
     assert r.json()["reply"]["feedback"]["filler_count"] == 3  # um, like, you know
 
 
@@ -621,20 +632,21 @@ def test_audio_metrics_become_delivery(client, mock_services, monkeypatch):
 
     monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
     session_id = _init(client, language="en")["session_id"]
-    r = client.post(
-        "/api/chat",
-        data={
-            "session_id": session_id, "language": "en",
-            "audio_secs": "4.0", "pitch_var": "12.5",
-        },
-        files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
-    )
-    assert r.status_code == 200, r.text
+    for _ in range(2):  # turn 1 = framing (no card)
+        r = client.post(
+            "/api/chat",
+            data={
+                "session_id": session_id, "language": "en",
+                "audio_secs": "4.0", "pitch_var": "12.5",
+            },
+            files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
+        )
+        assert r.status_code == 200, r.text
     delivery = r.json()["reply"]["feedback"]["delivery"]
     assert delivery["pace"] == 1.8  # 7 words / 4 s
     assert delivery["pitch"] == "monotone"  # 12.5 Hz < 25 Hz threshold
 
-    # A varied recording (>25 Hz variance) labels 'varied'
+    # A varied recording (>25 Hz variance) labels 'varied' (third turn)
     r2 = client.post(
         "/api/chat",
         data={
@@ -676,3 +688,33 @@ def test_summary_empty_session_422(client, mock_services):
     session_id = _init(client, language="en")["session_id"]
     r = client.post("/api/chat/summary", data={"session_id": session_id, "language": "en"})
     assert r.status_code == 422
+
+
+def test_moderator_interjection_on_even_turns(client, mock_services, monkeypatch):
+    """v13.1 moderator (default ON): the 2nd user turn gets a neutral
+    interjection with host-voice audio; the 1st does not."""
+    async def fake_fast(messages):
+        return "The coach owes you a steelman there."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    session_id = _init(client, language="en")["session_id"]
+    r1 = client.post("/api/chat", data={"session_id": session_id, "language": "en", "text": "AI will replace teachers."})
+    assert r1.status_code == 200
+    assert r1.json()["moderator"] is None  # framing turn — no interjection
+    r2 = client.post("/api/chat", data={"session_id": session_id, "language": "en", "text": "Teachers cannot be replaced."})
+    assert r2.status_code == 200
+    mod = r2.json()["moderator"]
+    assert mod is not None and "steelman" in mod["text"]
+    assert mod["audio_base64"] == "QUJD"  # spoken by the host voice (TTS mocked)
+
+
+def test_moderator_can_be_disabled_in_profile(client, mock_services, monkeypatch):
+    async def fake_fast(messages):
+        return "The coach owes you a steelman there."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    import json as _j
+    session_id = _init(client, language="en", profile=_j.dumps({"moderator": False}))["session_id"]
+    for _ in range(2):
+        r = client.post("/api/chat", data={"session_id": session_id, "language": "en", "text": "x"})
+    assert r.json()["moderator"] is None  # moderator off → no interjection

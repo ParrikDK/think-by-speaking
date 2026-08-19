@@ -223,6 +223,38 @@ def _history_for_llm(session: SessionData) -> list[dict]:
     return [{"role": m["role"], "content": m["text"]} for m in session.messages]
 
 
+async def _moderator_line(user_text: str, coach_reply: str, score: int | None, lang: str) -> str:
+    """One short neutral moderator interjection after a scored exchange
+    (v13.1): a clarifying question, a fairness call, or a score read-out.
+    Never takes sides. Cheap fast-model call; best-effort ('' on failure)."""
+    system = (
+        "You are the neutral debate moderator. React to this exchange in "
+        "ONE short spoken line (max 2 sentences, in the same language as "
+        "the exchange): either ask the learner a clarifying question, call "
+        "out unfairness (e.g. 'the coach owes you a steelman there'), or "
+        "read the score ('that brings it to 54 for you'). Never take "
+        "sides, never argue. Reply with ONLY the line."
+    )
+    parts = [f'Learner said: "{user_text}"', f'Coach replied: "{coach_reply}"']
+    if score is not None:
+        parts.append(f"Current learner score: {score}")
+    try:
+        line = await llm.chat_reply_fast([
+            {"role": "system", "content": system},
+            {"role": "user", "content": "\n".join(parts)},
+        ])
+        return llm.strip_markdown(line or "").strip()
+    except Exception:
+        return ""
+
+
+def _moderator_enabled(session: SessionData) -> bool:
+    """Moderator is DEFAULT ON (v13.1, user-directed) — the profile can
+    switch it off with moderator: false."""
+    profile = session.profile or {}
+    return profile.get("moderator", True) is not False
+
+
 def _enrichment_context(session: SessionData) -> str:
     """Build a short context string of recent debate feedback.
 
@@ -365,6 +397,12 @@ async def chat_turn(
             payload = {**payload, "reply": retried}
     turn = await _build_turn(payload, language, session.voice_id, session.level)
 
+    # v13.1 framing phase: the learner's FIRST turn is their position
+    # statement during topic definition — no points until the debate
+    # actually starts.
+    if not any(m["role"] == "user" for m in session.messages):
+        turn.feedback = None
+
     # v13.1 delivery pillars: fillers + audio metrics — spoken turns only
     # (typed input carries no delivery signal).
     if audio is not None and turn.feedback is not None:
@@ -381,7 +419,31 @@ async def chat_turn(
     await _persist_auth_turn(session, 2)
 
     error_type = "tts_failure" if not turn.audio_base64 else None
-    return ChatResponse(session_id=session_id, user_text=user_text, reply=turn, error_type=error_type)
+    moderator = None
+    # v13.1 moderator (default ON): every second debate turn gets a neutral
+    # interjection spoken by the host voice.
+    user_turns = sum(1 for m in session.messages if m["role"] == "user")
+    if (
+        _moderator_enabled(session)
+        and user_turns >= 2
+        and user_turns % 2 == 0
+    ):
+        line = await _moderator_line(
+            user_text, turn.text,
+            turn.feedback.score if turn.feedback else None, language,
+        )
+        if line:
+            try:
+                moderator_audio = await tts.synthesize(
+                    line, language, tts.moderator_voice(language)
+                )
+                moderator = {"text": line, "audio_base64": moderator_audio}
+            except Exception:
+                moderator = {"text": line, "audio_base64": ""}
+    return ChatResponse(
+        session_id=session_id, user_text=user_text, reply=turn,
+        error_type=error_type, moderator=moderator,
+    )
 
 
 # ── POST /api/chat/tts (regenerate audio for a failed turn) ──────────
@@ -509,6 +571,9 @@ async def chat_turn_stream(
         turn = await _build_turn(
             payload, language, session.voice_id, session.level, skip_audio=True
         )
+        # v13.1 framing phase: no points on the learner's first turn.
+        if not any(m["role"] == "user" for m in session.messages):
+            turn.feedback = None
         # v13.1 delivery pillars: fillers + audio metrics for spoken turns.
         if audio is not None and turn.feedback is not None:
             turn.feedback.filler_count = delivery.count_fillers(user_text)

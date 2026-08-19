@@ -18,18 +18,24 @@ const SPEEDS = [0.7, 1, 1.5];
 export default function MessageBubble({ msg, lang, onPlay, onStop, isPlaying = false, speed = 1, onSpeedChange, onRegenerateAudio }) {
   const t = useT(lang);
   const isTutor = msg.role === 'tutor';
+  const isModerator = msg.role === 'moderator';
 
   const feedback = msg.feedback || null;
 
   return (
-    <div className={isTutor ? 'msg msg-tutor' : 'msg msg-user'}>
+    <div className={`msg ${isTutor ? 'msg-tutor' : (isModerator ? 'msg-moderator' : 'msg-user')}`}>
       <div className="msg-meta">
         {isTutor && (
           <span className="msg-avatar">
             <Waveform active={isPlaying} color="#FFFFFF" height={11} barWidth={1.5} gap={1.5} />
           </span>
         )}
-        <span>{isTutor ? t('bubble.tutor') : t('bubble.you')}</span>
+        {isModerator && <span className="msg-avatar msg-avatar-moderator">⚖️</span>}
+        <span>
+          {isModerator
+            ? t('bubble.moderator', 'moderator')
+            : (isTutor ? t('bubble.tutor') : t('bubble.you'))}
+        </span>
       </div>
 
       <div className="msg-card">

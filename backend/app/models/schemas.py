@@ -73,6 +73,7 @@ class ChatResponse(BaseModel):
     user_text: str
     reply: TurnPayload
     error_type: Optional[str] = None  # "silence" | "llm_failure" | "tts_failure" | None
+    moderator: Optional[dict] = None  # v13.1: {text, audio_base64} interjection
 
 
 # ── History / stats ──────────────────────────────────────────────────

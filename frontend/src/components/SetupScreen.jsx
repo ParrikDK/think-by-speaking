@@ -202,6 +202,22 @@ export default function SetupScreen({
             ))}
           </div>
 
+          <label className="field-label" style={{ marginTop: 14 }}>{t('profile.moderator')}</label>
+          <div className="setup-chips">
+            <button
+              className={`setup-chip ${profile?.moderator !== false ? 'setup-chip-active' : ''}`}
+              onClick={() => onProfileChange({ ...(profile || {}), moderator: profile?.moderator === false ? true : false })}
+            >
+              ⚖️ {t('profile.moderator_on')}
+            </button>
+            <button
+              className={`setup-chip ${profile?.moderator === false ? 'setup-chip-active' : ''}`}
+              onClick={() => onProfileChange({ ...(profile || {}), moderator: false })}
+            >
+              {t('profile.moderator_off')}
+            </button>
+          </div>
+
           <label className="field-label" style={{ marginTop: 14 }}>{t('profile.style')}</label>
           <div className="setup-chips">
             {STYLES.map((key) => (

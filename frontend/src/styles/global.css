@@ -774,6 +774,24 @@ input, textarea, select {
   border-top: 1px dashed rgba(27, 36, 48, 0.12);
 }
 
+/* ── Moderator bubble (v13.1, default ON) — the neutral third speaker ── */
+.msg-moderator {
+  align-self: center;
+  max-width: 420px;
+}
+
+.msg-moderator .msg-card {
+  background: var(--color-surface-sunken);
+  border: 1px dashed var(--color-border-strong);
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.msg-avatar-moderator {
+  background: transparent;
+  font-size: 13px;
+}
+
 /* ── Debate feedback card (v13) — same palette language as .grammar-card ── */
 .debate-card {
   margin-top: 6px;

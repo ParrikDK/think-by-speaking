@@ -395,14 +395,16 @@ def test_feedback_card_fires_on_completed_turn(client, fake_upstream, monkeypatc
     monkeypatch.setattr("app.services.grammar.check", fake_check)
     with client.websocket_connect(ws_url(lang="yue", level="intermediate")) as ws:
         fake_upstream.wait_for("session.update")
-        ptt_turn(ws)
+        ptt_turn(ws)  # turn 1 = framing exchange — no card (v13.1)
+        ptt_turn(ws)  # turn 2 = the debate starts — card fires
         events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
     card = next(e for e in events if e["type"] == "proxy.feedback")
-    assert card["turn"] == 1
+    assert card["turn"] == 2
     assert card["stance"] == "disagree"
     assert card["score"] == 42
-    assert calls == [{"lang": "yue", "level": "intermediate", "native": "en",
-                      "user": "你好", "tutor": REPLY_TEXT}]
+    assert len(calls) == 1  # only the scored turn hit the judge
+    assert calls[0] == {"lang": "yue", "level": "intermediate", "native": "en",
+                        "user": "你好", "tutor": REPLY_TEXT}
 
 
 def test_grammar_not_fired_for_cancelled_turn(client, fake_upstream, monkeypatch):
@@ -619,7 +621,9 @@ def test_turn_metrics_become_delivery_on_card(client, fake_upstream, monkeypatch
     with client.websocket_connect(ws_url(lang="en", level="intermediate")) as ws:
         fake_upstream.wait_for("session.update")
         ws.send_text(json.dumps({"type": "turn_metrics", "pitch_var": 80.0, "secs": 3.0}))
-        ptt_turn(ws)
+        ptt_turn(ws)  # framing turn — no card
+        ws.send_text(json.dumps({"type": "turn_metrics", "pitch_var": 80.0, "secs": 3.0}))
+        ptt_turn(ws)  # scored turn
         events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
     card = next(e for e in events if e["type"] == "proxy.feedback")
     assert card["delivery"]["pitch"] == "varied"   # 80 Hz variance > 25
@@ -636,7 +640,8 @@ def test_no_metrics_no_delivery(client, fake_upstream, monkeypatch):
     monkeypatch.setattr("app.services.grammar.check", fake_check)
     with client.websocket_connect(ws_url(lang="en", level="intermediate")) as ws:
         fake_upstream.wait_for("session.update")
-        ptt_turn(ws)
+        ptt_turn(ws)  # framing — no card
+        ptt_turn(ws)  # scored turn
         events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
     card = next(e for e in events if e["type"] == "proxy.feedback")
     assert "delivery" not in card
@@ -649,3 +654,42 @@ def test_non_realtime_voice_falls_back_to_preset(client, fake_upstream):
     with client.websocket_connect(ws_url(lang="en", voice="en-GB-RyanNeural")) as ws:
         update = fake_upstream.wait_for("session.update")
     assert update["session"]["voice"] == "Jennifer"  # en preset, not the edge id
+
+
+# ── (k) moderator interjection (v13.1, default ON) ───────────────────
+
+def test_moderator_interjects_before_coach_on_even_turns(client, fake_upstream, monkeypatch):
+    """Turn 2+ (even): the host voice speaks a neutral line first — the
+    bridge sends session.update(host voice) + a response.create, then
+    switches back to the coach voice for the real reply."""
+    async def fake_fast(messages):
+        return "A fair challenge — the coach owes you a steelman there."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    with client.websocket_connect(ws_url(lang="en", level="intermediate", voice="Ethan")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)  # framing turn (1)
+        ptt_turn(ws)  # turn 2 — moderator interjection + coach reply
+        collect_until(ws, lambda e: e.get("type") == "response.done", limit=24)
+    updates = fake_upstream.events("session.update")
+    voices = [u["session"].get("voice") for u in updates]
+    # Jennifer (host) interjection, then back to Ethan (coach)
+    assert "Jennifer" in voices
+    creates = fake_upstream.events("response.create")
+    assert len(creates) >= 2  # moderator line + coach reply
+
+
+def test_moderator_skips_when_disabled(client, fake_upstream, monkeypatch):
+    async def fake_fast(messages):
+        return "A fair challenge."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    import urllib.parse
+    profile = urllib.parse.quote('{"moderator": false}')
+    with client.websocket_connect(ws_url(lang="en", level="intermediate", voice="Ethan", profile=profile)) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        ptt_turn(ws)
+        collect_until(ws, lambda e: e.get("type") == "response.done", limit=24)
+    voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
+    assert "Jennifer" not in voices  # moderator off → no host voice switch

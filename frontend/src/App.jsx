@@ -243,10 +243,18 @@ export default function App() {
       const reply = res.reply || {};
       const userText = res.user_text ?? (isTyped ? text : '');
       const errorType = res.error_type || null;
+      const moderator = res.moderator || null;
 
       // v13.1 guest memory: device-local analytics for logged-out users
       if (!user && reply.feedback) {
         recordGuestCard(reply.feedback, targetLang?.code);
+      }
+
+      if (moderator && moderator.text) {
+        setMessages((prev) => [...prev, {
+          id: nextMsgId(), role: 'moderator', text: moderator.text || '',
+          audio: moderator.audio_base64 || null, streaming: false,
+        }]);
       }
 
       setMessages((prev) => prev.map((m) => {

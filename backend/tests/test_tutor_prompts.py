@@ -55,7 +55,7 @@ class TestDebateDepths:
     def test_beginner_is_basics_depth(self):
         prompt = build_system_prompt("en", "beginner", is_init=False)
         assert "BASICS depth" in prompt
-        assert "no jargon" in prompt
+        assert "no jargon" in prompt.lower()
 
     def test_intermediate_is_balanced_depth(self):
         prompt = build_system_prompt("en", "intermediate", is_init=False)
@@ -70,17 +70,21 @@ class TestDebateDepths:
     def test_beginner_init_asks_what_they_believe(self):
         prompt = build_system_prompt("en", "beginner", is_init=True)
         assert "ask the learner what they think" in prompt
-        assert "no jargon" in prompt
+        assert "no jargon" in prompt.lower()
+        assert "FRAMING PHASE" in prompt
+        assert "no scoring in this phase" in prompt
 
-    def test_greetings_are_moderator_openings(self):
-        """v13 moderator intro (user-directed 2026-08-19): the greeting names
-        the subject, explains the format, and asks the learner's position
-        FIRST — the coach's own stance is NOT stated in the greeting."""
+    def test_greetings_are_moderator_framing_openings(self):
+        """v13.1 moderator framing phase (user-directed 2026-08-19): the
+        greeting defines the topic's terms, explains the format, asks the
+        learner's position FIRST, and does NOT score anything yet."""
         for level in VALID_LEVELS:
             prompt = build_system_prompt("en", level, is_init=True)
             assert "moderator" in prompt
+            assert "FRAMING PHASE" in prompt
             assert "state their position" in prompt or "what they think" in prompt
             assert "do not state your own position yet" in prompt
+            assert "do NOT score" in prompt or "no scoring in this phase" in prompt
             assert "always answers back" in prompt or "will always answer back" in prompt
 
     def test_concede_when_right(self):

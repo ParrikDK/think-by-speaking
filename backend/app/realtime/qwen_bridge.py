@@ -36,7 +36,7 @@ from ..prompts.realtime_personas import (
     silence_ms_for,
     voice_for,
 )
-from ..services import delivery, grammar
+from ..services import delivery, grammar, llm
 from .turns import TurnTracker
 
 # Plus only (spike, 2026-08-07): user testing confirmed flash is the weak
@@ -204,10 +204,16 @@ async def run_bridge(
     rollover reconnect — no fresh greeting."""
     settings = get_settings()
     tracker = TurnTracker(session)
-    # v13 moderator: the host speaks the greeting, then the coach takes over
-    # (mid-session voice switch after turn 1 — see after_turn_event).
+    # v13 moderator (default ON): the host speaks the greeting, then the
+    # coach takes over (mid-session voice switch after turn 1). The
+    # profile can switch the moderator off entirely (moderator: false).
+    moderator_on = (session.profile or {}).get("moderator", True) is not False
     moderator_voice = REALTIME_MODERATOR_VOICES.get(lang)
-    start_voice = moderator_voice if (moderator_voice and moderator_voice != voice) else voice
+    start_voice = (
+        moderator_voice
+        if (moderator_on and moderator_voice and moderator_voice != voice)
+        else voice
+    )
     session_cap = float(settings.realtime_max_audio_seconds)
     meter = _AudioMeter(
         user_id,
@@ -254,7 +260,7 @@ async def run_bridge(
     # response.done). Needed because response.cancel errors when no
     # response is active.
     state = {"responding": False, "first_audio_at": None, "audio_deltas": 0,
-             "audio_bytes": 0, "bg": set()}
+             "audio_bytes": 0, "bg": set(), "moderator_pending": False}
     # v13.1: client-measured delivery metrics for the NEXT turn (sent as a
     # turn_metrics frame right before input_audio_buffer.commit).
     pending_metrics: dict = {}
@@ -314,7 +320,11 @@ async def run_bridge(
 
     def maybe_fire_feedback(turn: int):
         """Fire the judge once both halves of a turn exist: the user
-        transcript and a non-cancelled response.done for that turn."""
+        transcript and a non-cancelled response.done for that turn.
+        Turn 1 is the framing exchange (moderator definition + the
+        learner's position) — no points until the debate starts."""
+        if turn <= 1:
+            return
         rec = tracker.records.get(turn)
         if not rec or rec.grammar_sent or not rec.response_done or not rec.user:
             return
@@ -323,13 +333,30 @@ async def run_bridge(
         state["bg"].add(task)
         task.add_done_callback(state["bg"].discard)
 
+    async def _moderator_line_realtime(claim: str) -> str:
+        """One short neutral host line before the coach's reply (v13.1).
+        Best-effort: '' on failure — the debate proceeds without it."""
+        try:
+            line = await llm.chat_reply_fast([
+                {"role": "system", "content": (
+                    "You are the neutral debate moderator. One short spoken "
+                    "line (max 2 sentences, same language as the claim): a "
+                    "clarifying question, a fairness call, or a score hint. "
+                    "Never take sides. Reply with ONLY the line."
+                )},
+                {"role": "user", "content": f'The learner claimed: "{claim}"'},
+            ])
+            return (line or "").strip()
+        except Exception:
+            return ""
+
     async def after_turn_event(turn: int):
         """Persist + feedback-check a turn as soon as it completes. On the
         FIRST completed turn (the moderator's greeting), switch the session
         voice from the host to the coach (v13, user-directed 2026-08-19)."""
         if turn <= 0:
             return
-        if turn == 1 and moderator_voice and voice and moderator_voice != voice:
+        if turn == 1 and moderator_on and moderator_voice and voice and moderator_voice != voice:
             try:
                 await upstream.send(json.dumps({
                     "type": "session.update",
@@ -411,6 +438,30 @@ async def run_bridge(
                         logger.debug("REALTIME user_text while responding -> response.cancel (typed barge-in)")
                         state["responding"] = False
                         await upstream.send(json.dumps({"type": "response.cancel"}))
+                    # v13.1 moderator (default ON): on even debate turns the
+                    # host speaks a neutral interjection BEFORE the coach —
+                    # a second voice via the proven mid-session switch. The
+                    # moderator response is not a tracked turn.
+                    if (
+                        not state["moderator_pending"]
+                        and turn >= 2 and turn % 2 == 0
+                        and moderator_voice and moderator_voice != voice
+                        and (session.profile or {}).get("moderator", True) is not False
+                    ):
+                        line = await _moderator_line_realtime(text)
+                        if line:
+                            state["moderator_pending"] = True
+                            await upstream.send(json.dumps({
+                                "type": "session.update",
+                                "session": {"voice": moderator_voice},
+                            }))
+                            await upstream.send(json.dumps({
+                                "type": "response.create",
+                                "instructions": (
+                                    "Say exactly this one line and nothing "
+                                    f"else, in the learner's language: {line}"
+                                ),
+                            }))
                     await upstream.send(json.dumps({
                         "type": "conversation.item.create",
                         "item": {
@@ -460,6 +511,16 @@ async def run_bridge(
                     "REALTIME response.done status={} audio: {} deltas / {}B",
                     status, state["audio_deltas"], state["audio_bytes"],
                 )
+                if state["moderator_pending"]:
+                    # The moderator's interjection finished — hand the floor
+                    # to the coach (its response was queued right after).
+                    state["moderator_pending"] = False
+                    if voice:
+                        await upstream.send(json.dumps({
+                            "type": "session.update",
+                            "session": {"voice": voice},
+                        }))
+                    continue
                 tracker.note_response_done(cancelled=(status == "cancelled"))
                 await after_turn_event(tracker.turn)
             elif etype == "input_audio_buffer.speech_started" and state["responding"]:
