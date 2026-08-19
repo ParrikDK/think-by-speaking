@@ -256,6 +256,9 @@ async def run_bridge(
     # response is active.
     state = {"responding": False, "first_audio_at": None, "audio_deltas": 0,
              "audio_bytes": 0, "bg": set()}
+    # v13.1: client-measured delivery metrics for the NEXT turn (sent as a
+    # turn_metrics frame right before input_audio_buffer.commit).
+    pending_metrics: dict = {}
 
     def romanize_text(text: str) -> str:
         """Never raises; '' when romanization is n/a for the language."""
@@ -297,8 +300,20 @@ async def run_bridge(
         )
         if result is None:
             return
-        # v13.1 delivery pillar: realtime turns are always spoken.
+        # v13.1 delivery pillars: realtime turns are always spoken; attach
+        # the client-measured pitch variance + pace when provided.
         result["filler_count"] = delivery.count_fillers(user_text)
+        if pending_metrics:
+            d: dict = {}
+            secs = pending_metrics.get("secs") or 0
+            if secs > 0.5:
+                d["pace"] = round(len(user_text.split()) / secs, 1)
+            pv = pending_metrics.get("pitch_var") or 0
+            if pv > 0:
+                d["pitch"] = "monotone" if pv < 25 else "varied"
+            if d:
+                result["delivery"] = d
+            pending_metrics.clear()
         try:
             await browser.send_text(json.dumps({
                 "type": "proxy.feedback",
@@ -350,6 +365,15 @@ async def run_bridge(
             msg = await browser.receive()
             if msg.get("type") == "websocket.disconnect":
                 break
+            if msg.get("type") == "turn_metrics":
+                # v13.1: delivery metrics for the next turn — proxy-only.
+                # .update() (not rebinding — the nested function would
+                # shadow the outer dict otherwise).
+                pending_metrics.update({
+                    "pitch_var": float(msg.get("pitch_var") or 0),
+                    "secs": float(msg.get("secs") or 0),
+                })
+                continue
             data = msg.get("bytes")
             if data:
                 meter.add_input(len(data))

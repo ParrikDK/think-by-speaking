@@ -601,3 +601,41 @@ def test_moderator_voice_handover_after_greeting(client, fake_upstream):
         handover = fake_upstream.events("session.update")[-1]
     assert first["session"]["voice"] == "Jennifer"   # the host opens the debate
     assert handover["session"]["voice"] == "Ethan"   # the coach takes over
+
+
+# ── (j) delivery metrics (v13.1): turn_metrics -> pace + pitch ──────
+
+def test_turn_metrics_become_delivery_on_card(client, fake_upstream, monkeypatch):
+    """The client's turn_metrics frame (pitch variance + duration) becomes
+    pace + pitch on the debate card for that turn."""
+    async def fake_check(lang, level, native_language, user_text, tutor_text="", history_text=""):
+        return {"stance": "partially_agree", "score": 50, "score_delta": 0,
+                "counter": "", "evidence": "", "next": "",
+                "fallacies": [], "structure": ""}
+
+    monkeypatch.setattr("app.services.grammar.check", fake_check)
+    with client.websocket_connect(ws_url(lang="en", level="intermediate")) as ws:
+        fake_upstream.wait_for("session.update")
+        ws.send_text(json.dumps({"type": "turn_metrics", "pitch_var": 80.0, "secs": 3.0}))
+        ptt_turn(ws)
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
+    card = next(e for e in events if e["type"] == "proxy.feedback")
+    assert card["delivery"]["pitch"] == "varied"   # 80 Hz variance > 25
+    # pace: the ptt_turn transcript is "你好" (1 word) over 3 s → 0.3 w/s
+    assert card["delivery"]["pace"] == 0.3
+
+
+def test_no_metrics_no_delivery(client, fake_upstream, monkeypatch):
+    async def fake_check(lang, level, native_language, user_text, tutor_text="", history_text=""):
+        return {"stance": "partially_agree", "score": 50, "score_delta": 0,
+                "counter": "", "evidence": "", "next": "",
+                "fallacies": [], "structure": ""}
+
+    monkeypatch.setattr("app.services.grammar.check", fake_check)
+    with client.websocket_connect(ws_url(lang="en", level="intermediate")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.feedback")
+    card = next(e for e in events if e["type"] == "proxy.feedback")
+    assert "delivery" not in card
+    assert card["filler_count"] == 0

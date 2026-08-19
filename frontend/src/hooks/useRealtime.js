@@ -17,6 +17,7 @@
 // still pass through untranslated.
 import { useEffect, useRef, useState } from 'react';
 import { getToken, realtimeWsUrl } from '../api';
+import { autocorrF0, stddev } from '../utils/audioMetrics';
 
 const MAX_RECONNECTS = 3;
 
@@ -119,6 +120,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
     const pttHeldRef = { current: false };
     const pttCancelRef = { current: false };
     const pttBytesRef = { current: 0 };
+    const pttPcmRef = { current: [] };  // Int16Array chunks of the held turn (v13.1 pitch)
     const turnRefRef = { current: null };      // {t, label} waiting for first tutor audio
     const respondingRef = { current: false };
     const recChunksRef = { current: null };    // PCM chunks of the in-flight response
@@ -316,7 +318,10 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
         if (modeRef.current === 'ptt' && !pttHeldRef.current) return; // ptt: send only while held
         const pcm = downsampleToPCM16(e.data, srcRate, 16000);
         if (pcm.length) {
-          if (modeRef.current === 'ptt') pttBytesRef.current += pcm.byteLength;
+          if (modeRef.current === 'ptt') {
+            pttBytesRef.current += pcm.byteLength;
+            pttPcmRef.current.push(pcm);       // keep the bytes for pitch analysis
+          }
           ws.send(pcm.buffer);                 // binary frame = raw PCM16 LE @16 kHz
         }
       };
@@ -616,6 +621,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
         pttCancelRef.current = false;
         setPttCancelState(false);
         pttBytesRef.current = 0;
+        pttPcmRef.current = [];
         if (playQueueRef.current.length > 0) {         // holding to talk = barge-in
           flushPlayback();
           sealTutorBubble();
@@ -636,6 +642,34 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
           ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
           return;
         }
+        // v13.1 audio pillar: measure the held turn (pitch variance via
+        // autocorrelation F0; duration from the byte count) and send it
+        // with the commit — the judge attaches pace + pitch to the card.
+        try {
+          const chunks = pttPcmRef.current;
+          const total = chunks.reduce((n, a) => n + a.length, 0);
+          const secs = total / 32000; // PCM16 @16 kHz
+          let pitchVar = 0;
+          if (total >= 4096) {
+            const mono = new Float32Array(total);
+            let o = 0;
+            for (const c of chunks) { for (let i = 0; i < c.length; i++) mono[o++] = c[i] / 32768; }
+            const f0s = [];
+            for (let off = 0; off + 2048 < mono.length; off += 1024) {
+              const f0 = autocorrF0(mono.subarray(off, off + 2048), 16000);
+              if (f0) f0s.push(f0);
+            }
+            pitchVar = Math.round(stddev(f0s) * 10) / 10;
+          }
+          if (secs > 0.5 || pitchVar > 0) {
+            ws.send(JSON.stringify({
+              type: 'turn_metrics',
+              pitch_var: pitchVar,
+              secs: Math.round(secs * 10) / 10,
+            }));
+          }
+        } catch (e) { /* metrics are best-effort */ }
+        pttPcmRef.current = [];
         turnRefRef.current = { t: performance.now(), label: 'commit' };
         ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
         ws.send(JSON.stringify({ type: 'response.create' }));
