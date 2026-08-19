@@ -125,6 +125,7 @@ class ScenarioOut(BaseModel):
     title: str
     description: str
     icon: str
+    interests: list[str] = []
 
 
 class VoiceOut(BaseModel):

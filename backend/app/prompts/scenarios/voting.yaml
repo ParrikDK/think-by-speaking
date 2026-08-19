@@ -2,6 +2,7 @@ id: voting
 title: Should Voting Be Compulsory?
 description: Debate turnout, freedom, duty, and whether forcing the vote works.
 icon: 🗳️
+interests: [politics, society]
 prompt: >-
   OPENING STANCE — "Compulsory voting is a good idea: it pushes turnout to
   near-universal, forces parties to court everyone instead of a few

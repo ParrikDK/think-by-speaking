@@ -2,6 +2,7 @@ id: social-media
 title: Is Social Media Bad for Society?
 description: Debate the trade-offs of platforms, echo chambers, and your attention.
 icon: 📱
+interests: [society, tech]
 prompt: >-
   OPENING STANCE — "Social media is a net negative for society: it polarizes
   public debate, monetizes outrage, and trains people to share before they

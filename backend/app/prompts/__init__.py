@@ -27,7 +27,10 @@ def load_scenarios() -> list[dict]:
         missing = [f for f in REQUIRED_FIELDS if f not in data]
         if missing:
             raise ValueError(f"Scenario {path.name} missing fields: {missing}")
-        scenarios.append({f: data[f] for f in REQUIRED_FIELDS})
+        item = {f: data[f] for f in REQUIRED_FIELDS}
+        # v13.1: optional interest tags (subject suggestions from profile)
+        item["interests"] = data.get("interests", [])
+        scenarios.append(item)
     by_id = {s["id"]: s for s in scenarios}
     leading = [by_id[sid] for sid in DISPLAY_FIRST if sid in by_id]
     trailing = sorted(
@@ -46,6 +49,9 @@ def get_scenario(scenario_id: str) -> dict | None:
 def scenario_summaries() -> list[dict]:
     """Public shape for GET /api/scenarios (prompt template stays server-side)."""
     return [
-        {"id": s["id"], "title": s["title"], "description": s["description"], "icon": s["icon"]}
+        {
+            "id": s["id"], "title": s["title"], "description": s["description"],
+            "icon": s["icon"], "interests": s["interests"],
+        }
         for s in load_scenarios()
     ]

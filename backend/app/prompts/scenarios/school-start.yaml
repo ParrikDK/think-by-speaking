@@ -2,6 +2,7 @@ id: school-start
 title: Should School Start Later?
 description: Debate sleep science, teenage biology, and what school is for.
 icon: ⏰
+interests: [education, society]
 prompt: >-
   OPENING STANCE — "Secondary schools should start later: teenagers are
   biologically wired to sleep late, and starting at 8 or earlier costs

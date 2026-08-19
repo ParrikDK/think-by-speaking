@@ -2,6 +2,7 @@ id: ai-future
 title: Will AI Take Our Jobs?
 description: Debate what AI actually automates — and what it creates instead.
 icon: 🤖
+interests: [tech, education, money]
 prompt: >-
   OPENING STANCE — "AI will not 'take' jobs; it will rewrite which tasks
   exist — the workers who adapt thrive, the skills that resist change become

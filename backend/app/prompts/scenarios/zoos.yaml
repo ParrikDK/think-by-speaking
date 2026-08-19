@@ -2,6 +2,7 @@ id: zoos
 title: Should Zoos Exist?
 description: Debate conservation, captivity, education, and animal welfare.
 icon: 🦁
+interests: [society, health]
 prompt: >-
   OPENING STANCE — "Modern zoos earn their keep when they are conservation
   centers first — breeding endangered species, funding field work, and

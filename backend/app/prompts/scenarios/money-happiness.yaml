@@ -2,6 +2,7 @@ id: money-happiness
 title: Does Money Buy Happiness?
 description: Debate the research on income, wellbeing, and what the numbers say.
 icon: 💰
+interests: [money, health]
 prompt: >-
   OPENING STANCE — "Money buys happiness — up to a point: the research shows
   wellbeing rises steeply with income until you are financially secure, then

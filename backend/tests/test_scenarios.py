@@ -34,7 +34,7 @@ def test_required_fields():
 
 def test_summaries_hide_prompt():
     for summary in scenario_summaries():
-        assert set(summary.keys()) == {"id", "title", "description", "icon"}
+        assert set(summary.keys()) == {"id", "title", "description", "icon", "interests"}
 
 
 def test_get_scenario():
@@ -60,7 +60,7 @@ def test_api_scenario_item_shape(client):
         assert "title" in s
         assert "description" in s
         assert "icon" in s
-        assert set(s.keys()) == {"id", "title", "description", "icon"}
+        assert set(s.keys()) == {"id", "title", "description", "icon", "interests"}
 
 
 def test_api_scenario_types(client):

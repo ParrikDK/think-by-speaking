@@ -56,6 +56,14 @@ export default function SetupScreen({
   const ready = targetLang && level;
   const interests = profile?.interests || [];
   const style = profile?.style || '';
+  // v13.1 subject suggestions: subjects matching the learner's interests
+  // lead the picker (personalization on display).
+  const interestSet = new Set(interests);
+  const orderedScenarios = [...scenarios].sort((a, b) => {
+    const am = (a.interests || []).filter((x) => interestSet.has(x)).length;
+    const bm = (b.interests || []).filter((x) => interestSet.has(x)).length;
+    return bm - am;
+  });
 
   const begin = () => {
     if (!ready) return;
@@ -172,7 +180,7 @@ export default function SetupScreen({
               onChange={(e) => setScenarioId(e.target.value)}
             >
               <option value="">{t('scenario.free_talk')}</option>
-              {scenarios.map((s) => (
+              {orderedScenarios.map((s) => (
                 <option key={s.id} value={s.id}>{s.title}</option>
               ))}
             </select>
