@@ -310,6 +310,40 @@ _DEBATE_ETHICS = (
     "is a debate that never taught anything."
 )
 
+# ── Debate styles / modes (v13.1, RhetoricX — user-directed 2026-08-19) ──
+# Injected when the learner profile carries a matching style. Socratic was
+# an existing profile style; heckler + boardroom are new modes.
+_STYLE_PROMPTS = {
+    "devils_advocate": (
+        "STYLE — devil's advocate: take the strongest opposing position to "
+        "the learner's claim and defend it relentlessly but fairly — make "
+        "them earn every point, concede only when the evidence is truly "
+        "against you."
+    ),
+    "socratic": (
+        "STYLE — socratic: never lecture. Respond mostly with targeted, "
+        "probing questions that expose contradictions, unstated assumptions "
+        "and weak evidence in the learner's argument — teach by making them "
+        "discover the flaws themselves."
+    ),
+    "heckler": (
+        "STYLE — heckler: keep the pressure on. Challenge quickly, keep the "
+        "tempo up, never let a weak claim slide — playful and sharp, never "
+        "mean. Push for a sharper claim at every turn."
+    ),
+    "boardroom": (
+        "STYLE — corporate boardroom: simulate a skeptical executive panel. "
+        "Demand numbers, evidence and concrete stakes; push back hard on "
+        "assumptions; frame every point in business terms (cost, risk, "
+        "scale, ROI). Hold the learner to executive standards."
+    ),
+    "encouraging": (
+        "STYLE — encouraging: warm and supportive. Focus on confidence and "
+        "building the learner up; challenge gently, and praise progress "
+        "explicitly and often."
+    ),
+}
+
 
 # ── Per-language register/style guidance, appended to the persona ───────
 # User-directed 2026-08-03: prefer casual spoken language over formal —
@@ -374,6 +408,9 @@ def build_system_prompt(
             "stake to this learner — never mention the profile in the reply "
             f"itself):\n{json.dumps(profile, ensure_ascii=False)}"
         )
+        style = profile.get("style")
+        if style in _STYLE_PROMPTS:
+            parts.append(_STYLE_PROMPTS[style])
 
     if enrichment:
         parts.append(f"SESSION CONTEXT (what has been scored so far — reference this in your reply):\n{enrichment}")

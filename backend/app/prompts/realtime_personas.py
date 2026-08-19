@@ -20,7 +20,7 @@ multilingual preset is chosen and marked "TODO: verify by ear".
 """
 import json
 
-from .tutor import LANGUAGE_NAMES, VALID_LEVELS
+from .tutor import LANGUAGE_NAMES, VALID_LEVELS, _STYLE_PROMPTS
 
 # ── Preset voices per language ────────────────────────────────────────
 # Doc evidence quoted from the voice table (2026-08-08 fetch).
@@ -193,6 +193,9 @@ def build_instructions(
             "mention the profile in what you say): "
             f"{json.dumps(profile, ensure_ascii=False)}"
         )
+        style = profile.get("style")
+        if style in _STYLE_PROMPTS:
+            parts.append(_STYLE_PROMPTS[style])
     if continuation:
         parts.append(
             "This session continues an ongoing debate — "

@@ -1339,6 +1339,8 @@ const extra = {
     "profile.interest.arts": "Arts & ideas",
     "profile.style.devils_advocate": "Devil's advocate",
     "profile.style.socratic": "Socratic",
+    "profile.style.heckler": "Heckler",
+    "profile.style.boardroom": "Boardroom",
     "profile.style.encouraging": "Encouraging",
 
     // Debate feedback card (v13)

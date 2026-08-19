@@ -338,3 +338,34 @@ def test_language_tables():
     for lang in SILENCE_MESSAGES:
         assert lang in LANGUAGE_NAMES, f"{lang} has a silence message but is missing from LANGUAGE_NAMES"
     assert SILENCE_MESSAGES.keys() == ERROR_MESSAGES.keys()
+
+
+# ── Debate styles / modes (v13.1, RhetoricX) ────────────────────────
+
+class TestDebateStyles:
+    """Each profile style injects its STYLE block into cascade + realtime."""
+
+    @pytest.mark.parametrize("style,marker", [
+        ("devils_advocate", "STYLE — devil's advocate"),
+        ("socratic", "STYLE — socratic"),
+        ("heckler", "STYLE — heckler"),
+        ("boardroom", "STYLE — corporate boardroom"),
+        ("encouraging", "STYLE — encouraging"),
+    ])
+    def test_style_block_injected_cascade(self, style, marker):
+        prompt = build_system_prompt("en", "intermediate", profile={"style": style})
+        assert marker in prompt
+
+    @pytest.mark.parametrize("style,marker", [
+        ("heckler", "STYLE — heckler"),
+        ("boardroom", "STYLE — corporate boardroom"),
+        ("socratic", "STYLE — socratic"),
+    ])
+    def test_style_block_injected_realtime(self, style, marker):
+        from app.prompts.realtime_personas import build_instructions
+        instructions = build_instructions("en", "intermediate", profile={"style": style})
+        assert marker in instructions
+
+    def test_no_style_block_without_profile(self):
+        prompt = build_system_prompt("en", "intermediate")
+        assert "STYLE —" not in prompt

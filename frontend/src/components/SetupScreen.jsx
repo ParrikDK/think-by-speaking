@@ -13,7 +13,7 @@ const POPULAR_LEARN = ['zh', 'yue', 'en'];
 // v13: the learner profile — the personalization moat. Interests shape the
 // coach's examples and subject suggestions; style shapes how hard it pushes.
 const INTERESTS = ['tech', 'health', 'money', 'society', 'education', 'sports', 'politics', 'arts'];
-const STYLES = ['devils_advocate', 'socratic', 'encouraging'];
+const STYLES = ['devils_advocate', 'socratic', 'heckler', 'boardroom', 'encouraging'];
 
 function toggleIn(list, item) {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
