@@ -602,3 +602,46 @@ class TestJyutpingStripped:
         assert "m4 goi1" not in out
         assert "m4" not in out
         assert "唔該" in out
+
+
+def test_audio_metrics_become_delivery(client, mock_services, monkeypatch):
+    """RhetoricX audio pillars (v13.1): client-measured audio_secs/pitch_var
+    become pace (words/sec) + pitch label on the spoken turn."""
+    async def zh_payload(messages, language="zh", native_language="en"):
+        return {
+            "reply": "Fair point!",
+            "translation": "Fair point!",
+            "feedback": {"stance": "partially_agree", "score": 54},
+        }
+
+    monkeypatch.setattr("app.services.llm.chat_json", zh_payload)
+
+    async def fake_transcribe(audio_bytes, language):
+        return "I think that is a good point"
+
+    monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
+    session_id = _init(client, language="en")["session_id"]
+    r = client.post(
+        "/api/chat",
+        data={
+            "session_id": session_id, "language": "en",
+            "audio_secs": "4.0", "pitch_var": "12.5",
+        },
+        files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
+    )
+    assert r.status_code == 200, r.text
+    delivery = r.json()["reply"]["feedback"]["delivery"]
+    assert delivery["pace"] == 1.8  # 7 words / 4 s
+    assert delivery["pitch"] == "monotone"  # 12.5 Hz < 25 Hz threshold
+
+    # A varied recording (>25 Hz variance) labels 'varied'
+    r2 = client.post(
+        "/api/chat",
+        data={
+            "session_id": session_id, "language": "en",
+            "audio_secs": "2.0", "pitch_var": "80.0",
+        },
+        files={"audio": ("audio.webm", b"\x00\x01\x02", "audio/webm")},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["reply"]["feedback"]["delivery"]["pitch"] == "varied"

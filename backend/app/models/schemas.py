@@ -37,6 +37,7 @@ class DebateFeedback(BaseModel):
     fallacies: list[dict] = Field(default_factory=list)  # {type, quote, note} ≤2
     structure: str = ""                                   # one structural line
     filler_count: int = 0                                 # spoken fillers (um/like)
+    delivery: dict = Field(default_factory=dict)          # {pace, pitch} from audio
 
 
 class TurnPayload(BaseModel):

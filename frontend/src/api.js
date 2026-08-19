@@ -182,10 +182,14 @@ const SSE_TIMEOUT_MS = 60000; // generous: server heartbeats keep it alive
 const SSE_MAX_RETRIES = 2;
 const SSE_RETRY_DELAY_MS = 1000;
 
-export async function streamChat({ sessionId, language, audioBlob, text, onToken, onAudio }) {
+export async function streamChat({ sessionId, language, audioBlob, text, audioSecs, pitchVar, onToken, onAudio }) {
   const form = new FormData();
   form.append('session_id', sessionId);
   form.append('language', language);
+  // v13.1 delivery pillars: client-measured audio metrics (duration, pitch
+  // variance) ride with the turn so the card can show pace + monotone.
+  if (audioSecs) form.append('audio_secs', String(audioSecs));
+  if (pitchVar) form.append('pitch_var', String(pitchVar));
   // Name the file by its real type — iOS records mp4 (not webm); Scribe
   // sniffs the extension/content-type, so a mismatched name risks rejection.
   const audioName = audioBlob?.type.startsWith('audio/mp4') ? 'recording.m4a' : 'recording.webm';

@@ -11,6 +11,7 @@ import {
   initChat, streamChat, regenerateTTS, getLanguages, getScenarios, getVoices, getMe, logout as apiLogout,
 } from './api';
 import STATIC_LANGUAGES from './i18n/languages';
+import { analyzeAudio } from './utils/audioMetrics';
 import { useT } from './i18n/useI18n';
 
 const STATIC_TARGET_LANGUAGES = STATIC_LANGUAGES.map((l) => ({
@@ -211,12 +212,17 @@ export default function App() {
     ]);
 
     let streamed = '';
+    // v13.1 delivery pillar: measure the recording (duration + pitch
+    // variance) so the card can show pace and monotone detection.
+    const metrics = blob && !isTyped ? await analyzeAudio(blob) : { audioSecs: 0, pitchVar: 0 };
     try {
       const res = await streamChat({
         sessionId,
         language: targetLang.code,
         audioBlob: blob,
         text: isTyped ? text : undefined,
+        audioSecs: metrics.audioSecs || undefined,
+        pitchVar: metrics.pitchVar || undefined,
         onToken: (tok) => {
           streamed += tok;
           const snapshot = streamed;

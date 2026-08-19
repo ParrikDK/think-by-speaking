@@ -15,12 +15,16 @@ export default function DebateCard({ feedback, lang }) {
   const t = useT(lang);
   if (!feedback) return null;
 
-  const { stance, score, score_delta, counter, evidence, next, fallacies, structure, filler_count } = feedback;
+  const { stance, score, score_delta, counter, evidence, next, fallacies, structure, filler_count, delivery } = feedback;
   const delta = Number(score_delta) || 0;
   const deltaClass = delta > 0 ? 'debate-delta-up' : delta < 0 ? 'debate-delta-down' : 'debate-delta-flat';
   const deltaArrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '±';
   const fallaciesList = Array.isArray(fallacies) ? fallacies.filter((f) => f && f.type) : [];
   const fillers = Number(filler_count) || 0;
+  const pace = delivery?.pace ? `${t('debate.pace', 'Pace')}: ${delivery.pace} w/s` : null;
+  const pitch = delivery?.pitch
+    ? `${t('debate.pitch', 'Pitch')}: ${t('debate.pitch.' + delivery.pitch, delivery.pitch)}`
+    : null;
 
   return (
     <div className="debate-card">
@@ -55,8 +59,8 @@ export default function DebateCard({ feedback, lang }) {
         </div>
       )}
 
-      {/* Delivery chips: fillers + structure */}
-      {(fillers > 0 || structure) && (
+      {/* Delivery chips: fillers + pace + pitch + structure */}
+      {(fillers > 0 || pace || pitch || structure) && (
         <div className="debate-row">
           <span className="debate-label">{t('debate.delivery', 'Delivery')}</span>
           <div className="debate-fallacies">
@@ -65,6 +69,8 @@ export default function DebateCard({ feedback, lang }) {
                 🎙️ {fillers} {t('debate.fillers', 'fillers')}
               </span>
             )}
+            {pace && <span className="debate-fallacy debate-fallacy-delivery">⏱️ {pace}</span>}
+            {pitch && <span className="debate-fallacy debate-fallacy-delivery">🎵 {pitch}</span>}
             {structure && <span className="debate-fallacy debate-fallacy-delivery">{structure}</span>}
           </div>
         </div>
