@@ -69,18 +69,19 @@ class TestDebateDepths:
 
     def test_beginner_init_asks_what_they_believe(self):
         prompt = build_system_prompt("en", "beginner", is_init=True)
-        assert "what they currently believe" in prompt
+        assert "ask the learner what they think" in prompt
         assert "no jargon" in prompt
 
-    def test_greetings_state_the_stance(self):
+    def test_greetings_are_moderator_openings(self):
+        """v13 moderator intro (user-directed 2026-08-19): the greeting names
+        the subject, explains the format, and asks the learner's position
+        FIRST — the coach's own stance is NOT stated in the greeting."""
         for level in VALID_LEVELS:
             prompt = build_system_prompt("en", level, is_init=True)
-            assert "state the subject" in prompt or "state the subject's" in prompt
-            assert (
-                "invite their first claim" in prompt
-                or "invite the learner's first claim" in prompt
-                or "ask the learner what they currently believe" in prompt
-            )
+            assert "moderator" in prompt
+            assert "state their position" in prompt or "what they think" in prompt
+            assert "do not state your own position yet" in prompt
+            assert "always answers back" in prompt or "will always answer back" in prompt
 
     def test_concede_when_right(self):
         for level in ("intermediate", "fluent"):
