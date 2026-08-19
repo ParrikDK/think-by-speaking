@@ -12,10 +12,9 @@ choice (subject → depth → style), and the wizard starts the debate.
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import get_settings
-from ..routers.languages import SUPPORTED_LANGUAGES
 from ..prompts import load_scenarios
-from ..prompts.tutor import VALID_LEVELS
 from ..services import llm, stt, tts
+from .chat import _validate_language
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
@@ -33,13 +32,26 @@ def _subject_options() -> list[dict]:
     return [{"id": s["id"], "label": s["title"]} for s in load_scenarios()]
 
 
+def _match_key_or_number(raw: str, choices: list[tuple[str, str]]) -> dict:
+    """One generic mapper: the LLM's answer matches a choice key or the
+    1-based ordinal it was read aloud as. Ordinals are explicit DATA — the
+    insertion order of the choices list, never a dict's."""
+    by_key = {key: label for key, label in choices}
+    if raw in by_key:
+        return {"unclear": False, "choice": raw, "label": by_key[raw]}
+    if raw.isdigit() and 1 <= int(raw) <= len(choices):
+        key, label = choices[int(raw) - 1]
+        return {"unclear": False, "choice": key, "label": label}
+    return {"unclear": True, "choice": None, "label": None}
+
+
 async def _map_answer(step: str, transcript: str) -> dict:
     """Map a spoken answer to a choice with the cheap LLM call. Returns
     {unclear: bool, choice: str|None, label: str|None}."""
+    opts = _subject_options()  # one build per answer (lru-cached YAML read)
     if step == "subject":
-        opts = _subject_options()
-        listing = "; ".join(f"{i+1} = {o['label']}" for i, o in enumerate(opts))
-        valid = [o["id"] for o in opts] + ["free"]
+        choices = [(o["id"], o["label"]) for o in opts]
+        listing = "; ".join(f"{i+1} = {label}" for i, (_, label) in enumerate(choices))
         system = (
             "You map a spoken answer to a debate subject. The learner said a "
             f"number, a subject name, or 'free'. Options: {listing}; also "
@@ -47,56 +59,28 @@ async def _map_answer(step: str, transcript: str) -> dict:
             "'free' when they want to pick their own topic. Reply 'unclear' "
             "when nothing matches."
         )
-    elif step == "depth":
-        system = (
-            "You map a spoken answer to a debate depth: Basics, Balanced or "
-            "Expert. Reply with ONLY beginner, intermediate or fluent. "
-            "Reply 'unclear' when nothing matches."
-        )
+        result = _match_key_or_number((await _fast_answer(system, transcript)), choices)
+        if not result["unclear"]:
+            return result
+        return _match_key_or_number("free", [("free", "Free debate")])             if (await _fast_answer(system, transcript)).lower() == "free"             else result
+    if step == "depth":
+        choices = [(lvl, DEPTH_LABELS[lvl]) for lvl in ("beginner", "intermediate", "fluent")]
     else:  # style
-        listing = "; ".join(f"{i+1} = {v}" for i, v in enumerate(STYLE_LABELS.values()))
-        system = (
-            f"You map a spoken answer to a coaching style: {listing}. "
-            "Reply with ONLY the style key (devils_advocate, socratic, "
-            "heckler, boardroom or encouraging). Reply 'unclear' when "
-            "nothing matches."
-        )
+        choices = list(STYLE_LABELS.items())
+    listing = "; ".join(f"{i+1} = {label}" for i, (_, label) in enumerate(choices))
+    system = (
+        "You map a spoken answer. Reply with ONLY the choice key. "
+        f"Options: {listing}. Reply 'unclear' when nothing matches."
+    )
+    return _match_key_or_number((await _fast_answer(system, transcript)), choices)
 
+
+async def _fast_answer(system: str, transcript: str) -> str:
     raw = await llm.chat_reply_fast([
         {"role": "system", "content": system},
         {"role": "user", "content": f"The learner said: \"{transcript}\""},
     ])
-    raw = (raw or "").strip().lower()
-    if not raw or raw == "unclear":
-        return {"unclear": True, "choice": None, "label": None}
-
-    if step == "subject":
-        by_id = {o["id"]: o["label"] for o in _subject_options()}
-        # accept the spoken id, or the 1-based number they were read
-        if raw in by_id:
-            return {"unclear": False, "choice": raw, "label": by_id[raw]}
-        if raw.isdigit() and 1 <= int(raw) <= len(by_id):
-            o = _subject_options()[int(raw) - 1]
-            return {"unclear": False, "choice": o["id"], "label": o["label"]}
-        if raw == "free":
-            return {"unclear": False, "choice": "free", "label": "Free debate"}
-        return {"unclear": True, "choice": None, "label": None}
-
-    if step == "depth":
-        if raw in VALID_LEVELS:
-            return {"unclear": False, "choice": raw, "label": DEPTH_LABELS[raw]}
-        # number mapping: 1 = Basics, 2 = Balanced, 3 = Expert
-        if raw.isdigit() and 1 <= int(raw) <= 3:
-            lvl = VALID_LEVELS[int(raw) - 1]
-            return {"unclear": False, "choice": lvl, "label": DEPTH_LABELS[lvl]}
-        return {"unclear": True, "choice": None, "label": None}
-
-    if raw in STYLE_LABELS:
-        return {"unclear": False, "choice": raw, "label": STYLE_LABELS[raw]}
-    if raw.isdigit() and 1 <= int(raw) <= len(STYLE_LABELS):
-        key = list(STYLE_LABELS)[int(raw) - 1]
-        return {"unclear": False, "choice": key, "label": STYLE_LABELS[key]}
-    return {"unclear": True, "choice": None, "label": None}
+    return (raw or "").strip().lower()
 
 
 @router.post("/voice")
@@ -108,8 +92,7 @@ async def voice_setup_parse(
     """One spoken answer → a mapped choice for the wizard step."""
     if step not in ("subject", "depth", "style"):
         raise HTTPException(422, "step must be subject|depth|style")
-    if language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(400, f"Unsupported language: {language}")
+    _validate_language(language)
     audio_bytes = await audio.read()
     if len(audio_bytes) > get_settings().max_audio_bytes:
         raise HTTPException(413, "Audio too large")

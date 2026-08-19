@@ -12,20 +12,19 @@ session-cap rollover reconnect: the persona is told to skip the greeting
 and continue the conversation naturally. The bridge itself lives in
 app/realtime/qwen_bridge.py.
 """
-import json
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, HTTPException
+from fastapi import APIRouter, WebSocket
 from loguru import logger
 
 from ..config import get_settings
-from ..db import usage_store
 from ..db.user_store import user_store
 from ..prompts import get_scenario
 from ..prompts.realtime_personas import _VOICES, voice_for
 from ..prompts.tutor import LANGUAGE_NAMES, VALID_LEVELS
 from ..realtime import qwen_bridge
 from ..realtime.languages import supports_realtime
+from ..models.schemas import parse_profile
 from ..realtime.turns import create_session
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
@@ -34,20 +33,6 @@ router = APIRouter(prefix="/realtime", tags=["realtime"])
 # (realtime_max_concurrent_per_ip). Process-local like the HTTP rate
 # limiter — good enough for a single-process deploy.
 _active_by_ip: dict[str, int] = {}
-
-
-def _parse_profile(raw: Optional[str]) -> Optional[dict]:
-    """Parse the learner profile JSON from the WS query. Oversized or
-    malformed profiles are dropped — never fail a session over a profile."""
-    if not raw or not raw.strip():
-        return None
-    if len(raw) > 4096:
-        raise HTTPException(422, "Profile too large")
-    try:
-        parsed = json.loads(raw)
-        return parsed if isinstance(parsed, dict) else None
-    except json.JSONDecodeError:
-        return None
 
 
 @router.websocket("/ws")
@@ -126,36 +111,11 @@ async def realtime_ws(
         await websocket.close(code=1013)
         return
 
-    # ── quota ──
-    # Daily quota enforcement DISABLED (2026-08-17, personal deploy — no
-    # accounts, no limits): the guest trial (realtime_guest_trial_seconds)
-    # and the registered-user daily minutes never trigger. The upstream
-    # 540 s session cap still rolls the connection silently (code 4000,
-    # qwen_bridge._AudioMeter) — that is a DashScope API constraint, not
-    # an account limit.
-    #
-    # cap_seconds = (
-    #     settings.realtime_daily_minutes * 60
-    #     if user
-    #     else settings.realtime_guest_trial_seconds
-    # )
-    # try:
-    #     used = await usage_store.seconds_used_today(user_id, client_ip)
-    # except Exception as exc:
-    #     logger.error("usage_audio read failed: {}", exc)
-    #     used = 0
-    # remaining = cap_seconds - used
-    # if remaining <= 0:
-    #     await qwen_bridge.send_error(
-    #         websocket,
-    #         "daily realtime voice quota used up — come back tomorrow"
-    #         + ("" if user else ", or create a free account for more"),
-    #         code="quota_exhausted",
-    #     )
-    #     await websocket.close(code=4001)
-    #     return
+    # Quota note (2026-08-17, personal deploy): daily-quota enforcement is
+    # disabled — the upstream 540 s session cap (close 4000) is the only
+    # limiter; see qwen_bridge._AudioMeter.
     user_id = user.id if user else ""
-    profile_data = _parse_profile(profile)
+    profile_data = parse_profile(profile)
     # v13.1: the voice param must be a KNOWN realtime preset — an edge or
     # ElevenLabs voice id reaching the qwen engine errors upstream with
     # "Voice 'X' is not supported". Fall back to the language preset.
@@ -181,7 +141,6 @@ async def realtime_ws(
             client_ip=client_ip,
             profile=profile_data,
             voice=voice,
-            # Quota disabled (see above) — the bridge ignores this value.
             quota_remaining_seconds=float(settings.realtime_max_audio_seconds),
             continuation=bool(cont),
         )

@@ -120,26 +120,8 @@ def normalize_payload(parsed: dict) -> dict:
     if not isinstance(feedback, dict):
         feedback = None
     else:
-        fallacies = []
-        for f in (feedback.get("fallacies") or []):
-            if isinstance(f, dict):
-                fallacies.append({
-                    "type": str(f.get("type") or "other"),
-                    "quote": str(f.get("quote") or ""),
-                    "note": str(f.get("note") or ""),
-                })
-            if len(fallacies) >= 2:  # the contract caps at 2
-                break
-        feedback = {
-            "stance": str(feedback.get("stance") or "partially_agree"),
-            "score": int(feedback.get("score") or 50),
-            "score_delta": int(feedback.get("score_delta") or 0),
-            "counter": str(feedback.get("counter") or ""),
-            "evidence": str(feedback.get("evidence") or ""),
-            "next": str(feedback.get("next") or ""),
-            "fallacies": fallacies,
-            "structure": str(feedback.get("structure") or ""),
-        }
+        from .grammar import normalize_feedback_card  # local import (cycle-free)
+        feedback = normalize_feedback_card(feedback)
 
     return {
         "reply": reply,

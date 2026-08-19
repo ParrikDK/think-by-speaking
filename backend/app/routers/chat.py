@@ -22,6 +22,7 @@ from ..models.schemas import (
     ChatResponse,
     DebateFeedback,
     TurnPayload,
+    parse_profile,
 )
 from ..prompts import get_scenario
 from ..prompts.tutor import VALID_LEVELS, build_messages, silence_message
@@ -57,20 +58,6 @@ def _normalize_scenario(scenario_id: Optional[str]) -> Optional[str]:
         return None
     scenario_id = scenario_id.strip()
     return scenario_id if get_scenario(scenario_id) else None
-
-
-def _parse_profile(raw: Optional[str]) -> Optional[dict]:
-    """Parse the learner profile JSON from the form/query. Oversized or
-    malformed profiles are dropped — never fail a session over a profile."""
-    if not raw or not raw.strip():
-        return None
-    if len(raw) > 4096:
-        raise HTTPException(422, "Profile too large")
-    try:
-        parsed = json.loads(raw)
-        return parsed if isinstance(parsed, dict) else None
-    except json.JSONDecodeError:
-        return None
 
 
 # Compiled once at import — matches the _MD_PATTERNS idiom in services/llm.py.
@@ -217,23 +204,6 @@ async def _build_turn(
     )
 
 
-def _attach_delivery(turn: TurnPayload, user_text: str, audio_secs: float | None, pitch_var: float | None) -> None:
-    """v13.1 audio pillars: pace (words/sec from the client-measured audio
-    duration) and pitch label (varied vs monotone from the client-computed
-    pitch variance). Conservative thresholds — never claim more than the
-    metrics support."""
-    if turn.feedback is None:
-        return
-    d: dict = {}
-    if audio_secs and audio_secs > 0.5:
-        words = len(user_text.split())
-        d["pace"] = round(words / audio_secs, 1)
-    if pitch_var is not None and pitch_var > 0:
-        d["pitch"] = "monotone" if pitch_var < 25 else "varied"
-    if d:
-        turn.feedback.delivery = d
-
-
 async def _silence_turn(language: str, native_language: str, voice_id: str, level: str) -> TurnPayload:
     """Localized 'didn't catch that' canned reply with audio (Edge TTS).
 
@@ -325,7 +295,7 @@ async def chat_init(
     if native_language not in SUPPORTED_LANGUAGES:
         native_language = "en"
     scenario = _normalize_scenario(scenario_id)
-    profile_data = _parse_profile(profile)
+    profile_data = parse_profile(profile)
 
     session = session_store.create(
         SessionData(
@@ -395,11 +365,13 @@ async def chat_turn(
             payload = {**payload, "reply": retried}
     turn = await _build_turn(payload, language, session.voice_id, session.level)
 
-    # v13.1 delivery pillars: fillers + audio metrics (pace, pitch) — only
-    # for SPOKEN turns (typed input carries no delivery signal).
+    # v13.1 delivery pillars: fillers + audio metrics — spoken turns only
+    # (typed input carries no delivery signal).
     if audio is not None and turn.feedback is not None:
         turn.feedback.filler_count = delivery.count_fillers(user_text)
-        _attach_delivery(turn, user_text, audio_secs, pitch_var)
+        card = turn.feedback.model_dump()
+        delivery.attach_metrics(card, user_text, audio_secs, pitch_var)
+        turn.feedback.delivery = card.get("delivery") or {}
 
     session.add_message("user", user_text)
     session.add_message(
@@ -409,7 +381,7 @@ async def chat_turn(
     await _persist_auth_turn(session, 2)
 
     error_type = "tts_failure" if not turn.audio_base64 else None
-    return ChatResponse(session_id=session_id, user_text=user_text, user_pronunciation="", reply=turn, error_type=error_type)
+    return ChatResponse(session_id=session_id, user_text=user_text, reply=turn, error_type=error_type)
 
 
 # ── POST /api/chat/tts (regenerate audio for a failed turn) ──────────
@@ -540,7 +512,9 @@ async def chat_turn_stream(
         # v13.1 delivery pillars: fillers + audio metrics for spoken turns.
         if audio is not None and turn.feedback is not None:
             turn.feedback.filler_count = delivery.count_fillers(user_text)
-            _attach_delivery(turn, user_text, audio_secs, pitch_var)
+            delivery.attach_metrics(
+                turn.feedback.model_dump(), user_text, audio_secs, pitch_var
+            )
         yield _sse("complete", ChatResponse(
             session_id=session_id, user_text=user_text, reply=turn, error_type=error_type,
         ).model_dump())

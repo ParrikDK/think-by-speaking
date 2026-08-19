@@ -1,7 +1,23 @@
 """Pydantic schemas matching docs/api-contract.md exactly."""
+import json
 from typing import Optional
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
+
+
+def parse_profile(raw: Optional[str]) -> Optional[dict]:
+    """Parse the learner profile JSON from a form/WS payload. Oversized or
+    malformed profiles are dropped — never fail a session over a profile."""
+    if not raw or not raw.strip():
+        return None
+    if len(raw) > 4096:
+        raise HTTPException(422, "Profile too large")
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
 
 
 # ── Auth ─────────────────────────────────────────────────────────────
@@ -43,7 +59,6 @@ class DebateFeedback(BaseModel):
 class TurnPayload(BaseModel):
     text: str
     translation: str = ""
-    pronunciation: str = ""
     feedback: Optional[DebateFeedback] = None
     audio_base64: str = ""
 
@@ -56,7 +71,6 @@ class ChatInitResponse(BaseModel):
 class ChatResponse(BaseModel):
     session_id: str
     user_text: str
-    user_pronunciation: str = ""
     reply: TurnPayload
     error_type: Optional[str] = None  # "silence" | "llm_failure" | "tts_failure" | None
 

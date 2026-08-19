@@ -245,28 +245,42 @@ async def get_stats(user_id: str, include_recent: bool = False) -> dict:
     return stats
 
 
+# Per-user incremental cache for debate_trends: aggregates are an
+# append-only monoid — cache the result per user keyed on the highest
+# message id seen, and merge only rows newer than the mark on each call
+# (v13.1 efficiency review: the old code re-scanned + re-parsed every
+# card on every /api/stats request).
+_trends_cache: dict[str, dict] = {}
+
+
 async def debate_trends(user_id: str, limit: int = 10) -> dict:
-    """Think By Speaking memory (v13.1) — the moat: per-user debate analytics
-    aggregated from the stored feedback cards. Progress persists across
-    sessions: avg/best score, fallacy totals by type, filler totals, and a
-    per-session score history for trend bars."""
+    """Think By Speaking memory (v13.1) — the moat: per-user debate
+    analytics aggregated from the stored feedback cards, incremental per
+    user (only new cards are parsed after the first call)."""
     import json
 
     db = get_db()
+    cache = _trends_cache.setdefault(
+        user_id, {"last_msg_id": 0, "per_session": {}, "totals": {
+            "turns": 0, "score_sum": 0, "best": 0, "fallacies": {}, "fillers": 0,
+        }}
+    )
     async with db.execute(
         """
-        SELECT s.id AS session_id, s.started_at, m.grammar_json
+        SELECT s.id AS session_id, s.started_at, m.id AS msg_id, m.grammar_json
         FROM messages m JOIN sessions s ON s.id = m.session_id
         WHERE s.user_id = ? AND m.role = 'assistant' AND m.grammar_json IS NOT NULL
-        ORDER BY m.created_at
+          AND m.id > ?
+        ORDER BY m.id
         """,
-        (user_id,),
+        (user_id, cache["last_msg_id"]),
     ) as cur:
         rows = await cur.fetchall()
 
-    per_session: dict[str, dict] = {}
-    totals = {"turns": 0, "score_sum": 0, "best": 0, "fallacies": {}, "fillers": 0}
+    per_session = cache["per_session"]
+    totals = cache["totals"]
     for r in rows:
+        cache["last_msg_id"] = max(cache["last_msg_id"], r["msg_id"])
         try:
             card = json.loads(r["grammar_json"])
         except Exception:

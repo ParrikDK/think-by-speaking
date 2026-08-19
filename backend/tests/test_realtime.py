@@ -297,7 +297,7 @@ def test_user_text_typed_turn(client, fake_upstream):
         events = collect_until(ws, lambda e: e.get("type") == "response.done")
     echo = next(e for e in events if e["type"] == "proxy.user_transcript")
     assert echo["transcript"] == "你好" and echo["turn"] == 1
-    assert "nǐ" in echo["romanization"]
+    assert "romanization" not in echo  # v13.1: romanization feature removed
     item = fake_upstream.wait_for("conversation.item.create")
     assert item["item"]["content"][0] == {"type": "input_text", "text": "你好"}
     assert fake_upstream.events("response.create")
@@ -359,7 +359,9 @@ def test_wrong_script_transcript_blanked_and_flagged(client, fake_upstream):
     assert event["turn"] == 1
 
 
-def test_cjk_transcript_gets_romanization_and_turn(client, fake_upstream):
+def test_cjk_transcript_keeps_turn_without_romanization(client, fake_upstream):
+    """v13.1: the romanization feature is gone — the turn pipeline (ASR
+    echo + tutor transcript) still works for CJK transcripts."""
     with client.websocket_connect(ws_url(lang="zh")) as ws:
         fake_upstream.wait_for("session.update")
         ptt_turn(ws)
@@ -370,11 +372,11 @@ def test_cjk_transcript_gets_romanization_and_turn(client, fake_upstream):
     )
     assert asr["transcript"] == "你好"
     assert asr["turn"] == 1
-    assert "nǐ" in asr["romanization"]
+    assert "romanization" not in asr
     tutor = next(e for e in events if e["type"] == "response.audio_transcript.done")
     assert tutor["transcript"] == REPLY_TEXT
     assert tutor["turn"] == 1
-    assert "nǐ" in tutor["romanization"]
+    assert "romanization" not in tutor
 
 
 # ── (f) debate feedback card on turn completion ───────────────────────

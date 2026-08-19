@@ -19,6 +19,31 @@ from ..config import get_settings
 from ..prompts.tutor import LANGUAGE_NAMES
 from . import llm
 
+
+def normalize_feedback_card(data: dict) -> dict:
+    """Coerce a judge/LLM dict into the feedback-card shape (shared by the
+    cascade normalize_payload and the realtime judge)."""
+    fallacies = []
+    for f in (data.get("fallacies") or []):
+        if isinstance(f, dict):
+            fallacies.append({
+                "type": str(f.get("type") or "other"),
+                "quote": str(f.get("quote") or ""),
+                "note": str(f.get("note") or ""),
+            })
+        if len(fallacies) >= 2:  # the contract caps at 2
+            break
+    return {
+        "stance": str(data.get("stance") or "partially_agree"),
+        "score": int(data.get("score") or 50),
+        "score_delta": int(data.get("score_delta") or 0),
+        "counter": str(data.get("counter") or ""),
+        "evidence": str(data.get("evidence") or ""),
+        "next": str(data.get("next") or ""),
+        "fallacies": fallacies,
+        "structure": str(data.get("structure") or ""),
+    }
+
 _SYSTEM = (
     "You are a debate judge and fact-checker for a general debate. You are "
     "given the learner's claim, the coach's reply, and recent turns of the "
@@ -85,26 +110,7 @@ async def check(
         )
         content = (response.choices[0].message.content or "").strip()
         data = llm.extract_json(content)
-        fallacies = []
-        for f in (data.get("fallacies") or []):
-            if isinstance(f, dict):
-                fallacies.append({
-                    "type": str(f.get("type") or "other"),
-                    "quote": str(f.get("quote") or ""),
-                    "note": str(f.get("note") or ""),
-                })
-            if len(fallacies) >= 2:
-                break
-        return {
-            "stance": str(data.get("stance") or "partially_agree"),
-            "score": int(data.get("score") or 50),
-            "score_delta": int(data.get("score_delta") or 0),
-            "counter": str(data.get("counter") or ""),
-            "evidence": str(data.get("evidence") or ""),
-            "next": str(data.get("next") or ""),
-            "fallacies": fallacies,
-            "structure": str(data.get("structure") or ""),
-        }
+        return normalize_feedback_card(data)
     except Exception as exc:
         logger.warning("Debate feedback check failed ({}): {}", lang, exc)
         return None

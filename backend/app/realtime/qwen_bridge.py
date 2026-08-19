@@ -37,7 +37,6 @@ from ..prompts.realtime_personas import (
     voice_for,
 )
 from ..services import delivery, grammar
-from ..services.romanize import romanize
 from .turns import TurnTracker
 
 # Plus only (spike, 2026-08-07): user testing confirmed flash is the weak
@@ -260,15 +259,6 @@ async def run_bridge(
     # turn_metrics frame right before input_audio_buffer.commit).
     pending_metrics: dict = {}
 
-    def romanize_text(text: str) -> str:
-        """Never raises; '' when romanization is n/a for the language."""
-        if not text:
-            return ""
-        try:
-            return romanize(text, lang) or ""
-        except Exception:
-            return ""
-
     async def close_for_meter():
         """Session-cap close: explanatory event, then the code the client
         keys its behavior on (4000 reconnect; 4001 upsell is dead since the
@@ -304,15 +294,10 @@ async def run_bridge(
         # the client-measured pitch variance + pace when provided.
         result["filler_count"] = delivery.count_fillers(user_text)
         if pending_metrics:
-            d: dict = {}
-            secs = pending_metrics.get("secs") or 0
-            if secs > 0.5:
-                d["pace"] = round(len(user_text.split()) / secs, 1)
-            pv = pending_metrics.get("pitch_var") or 0
-            if pv > 0:
-                d["pitch"] = "monotone" if pv < 25 else "varied"
-            if d:
-                result["delivery"] = d
+            delivery.attach_metrics(
+                result, user_text,
+                pending_metrics.get("secs"), pending_metrics.get("pitch_var"),
+            )
             pending_metrics.clear()
         try:
             await browser.send_text(json.dumps({
@@ -419,7 +404,6 @@ async def run_bridge(
                     await browser.send_text(json.dumps({
                         "type": "proxy.user_transcript",
                         "transcript": text,
-                        "romanization": romanize_text(text),
                         "turn": turn,
                     }))
                     await after_turn_event(turn)
@@ -508,12 +492,10 @@ async def run_bridge(
                 elif transcript:
                     turn = tracker.note_user_transcript(transcript)
                     event["turn"] = turn
-                    event["romanization"] = romanize_text(transcript)
                     await after_turn_event(turn)
             elif etype == "response.audio_transcript.done":
                 event["turn"] = tracker.turn
                 transcript = event.get("transcript") or ""
-                event["romanization"] = romanize_text(transcript)
                 tracker.note_tutor_text(transcript)
 
             await browser.send_text(json.dumps(event))
