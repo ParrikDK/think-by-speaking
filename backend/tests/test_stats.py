@@ -105,7 +105,8 @@ def test_debate_trends_aggregates_cards(client):
             ([60, 66], [[{"type": "strawman"}], [{"type": "strawman"}]], [3, 1]),
             ([52], [[{"type": "red_herring"}, {"type": "strawman"}]], [2]),
         ]):
-            sid = await _insert_session(user_id, datetime(2026, 8, 19, 10, 0, tzinfo=timezone.utc), datetime(2026, 8, 19, 10, 10, tzinfo=timezone.utc))
+            start = datetime(2026, 8, 19, 9, s_idx, tzinfo=timezone.utc)  # session 1 earlier
+            sid = await _insert_session(user_id, start, datetime(2026, 8, 19, 10, 10, tzinfo=timezone.utc))
             for i, (score, fally, filler) in enumerate(zip(scores, fallacy_lists, fillers)):
                 await db.execute(
                     "INSERT INTO messages (session_id, seq, role, text, grammar_json, created_at) VALUES (?, ?, 'assistant', 'ok', ?, ?)",
