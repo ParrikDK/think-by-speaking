@@ -100,7 +100,7 @@ def test_text_chat_turn_skips_stt(client, mock_services, monkeypatch):
 
 
 def test_fillers_counted_on_spoken_turns(client, mock_services, monkeypatch):
-    """RhetoricX delivery pillar: spoken turns count fillers (um/like);
+    """Think By Speaking delivery pillar: spoken turns count fillers (um/like);
     typed turns carry none."""
     async def zh_payload(messages, language="zh", native_language="en"):
         return {
@@ -605,7 +605,7 @@ class TestJyutpingStripped:
 
 
 def test_audio_metrics_become_delivery(client, mock_services, monkeypatch):
-    """RhetoricX audio pillars (v13.1): client-measured audio_secs/pitch_var
+    """Think By Speaking audio pillars (v13.1): client-measured audio_secs/pitch_var
     become pace (words/sec) + pitch label on the spoken turn."""
     async def zh_payload(messages, language="zh", native_language="en"):
         return {

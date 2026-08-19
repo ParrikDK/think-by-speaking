@@ -1,4 +1,4 @@
-// Audio delivery metrics (RhetoricX "how you sound" pillar, v13.1).
+// Audio delivery metrics — the "how you sound" pillar (v13.1).
 //
 // analyzeAudio(blob) decodes the recorded turn and returns:
 //   { audioSecs, pitchVar } — speaking duration and the standard deviation

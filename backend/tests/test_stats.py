@@ -92,7 +92,7 @@ def test_total_minutes_clamped_and_requires_user_message(client):
     assert stats["total_minutes"] == 80  # 60 (clamped) + 0 + 20
 
 
-# ── RhetoricX memory (v13.1): debate_trends aggregation ─────────────
+# ── Think By Speaking memory (v13.1): debate_trends aggregation ─────
 
 def test_debate_trends_aggregates_cards(client):
     """Two sessions with feedback cards → avg/best score, fallacy totals,

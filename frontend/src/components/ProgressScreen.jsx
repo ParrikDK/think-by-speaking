@@ -106,7 +106,7 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
               </section>
             )}
 
-            {/* Debate analytics — RhetoricX memory (v13.1): the persistent
+            {/* Debate analytics — persistent
                 progress that is the moat. */}
             {(() => {
               const d = stats?.debate || {};

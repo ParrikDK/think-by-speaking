@@ -1,4 +1,4 @@
-"""Delivery analytics — the "how you sound" pillar (RhetoricX, v13.1).
+"""Delivery analytics — the "how you sound" pillar (Think By Speaking, v13.1).
 
 Current: filler-word counting on the learner's SPOKEN transcript (typed
 input carries no delivery signal). Planned: pitch variance and speaking

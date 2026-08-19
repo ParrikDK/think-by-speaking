@@ -4,7 +4,7 @@ import { useT } from '../i18n/useI18n';
  * Post-turn debate feedback card (v13). Attached to USER messages: the
  * coach's stance on the claim, the running debate score with delta, the
  * counter-argument, one evidence-backed fact, the next challenge — plus
- * the RhetoricX pillars (v13.1): fallacy radar chips, structure line and
+ * the Think By Speaking pillars (v13.1): fallacy radar chips, structure line and
  * the filler count.
  *
  * @param {object} feedback - {stance, score, score_delta, counter, evidence,
@@ -40,7 +40,7 @@ export default function DebateCard({ feedback, lang }) {
         </span>
       </div>
 
-      {/* Fallacy radar (RhetoricX pillar) */}
+      {/* Fallacy radar */}
       {fallaciesList.length > 0 && (
         <div className="debate-row">
           <span className="debate-label">{t('debate.fallacies', 'Fallacies')}</span>

@@ -210,7 +210,7 @@ def test_json_contract_instruction_present():
 
 
 def test_contract_carries_fallacies_and_structure():
-    """RhetoricX pillars (v13.1): the contract names the fallacy radar and
+    """Think By Speaking pillars (v13.1): the contract names the fallacy radar and
     the structure line, and caps the fallacy list at 2."""
     assert '"fallacies"' in JSON_CONTRACT
     assert '"strawman"' in JSON_CONTRACT
@@ -340,7 +340,7 @@ def test_language_tables():
     assert SILENCE_MESSAGES.keys() == ERROR_MESSAGES.keys()
 
 
-# ── Debate styles / modes (v13.1, RhetoricX) ────────────────────────
+# ── Debate styles / modes (v13.1) ──────────────────────────────────
 
 class TestDebateStyles:
     """Each profile style injects its STYLE block into cascade + realtime."""

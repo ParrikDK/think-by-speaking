@@ -27,7 +27,7 @@ class AuthResponse(BaseModel):
 class DebateFeedback(BaseModel):
     """Post-turn debate card: stance on the learner's claim, running score,
     counter-argument, one piece of evidence, next challenge question, plus
-    the RhetoricX pillars (v13.1): logical fallacies, structure, fillers."""
+    the Think By Speaking pillars (v13.1): logical fallacies, structure, fillers."""
     stance: str = "partially_agree"  # agree | partially_agree | disagree
     score: int = 50
     score_delta: int = 0

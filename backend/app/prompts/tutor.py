@@ -310,7 +310,7 @@ _DEBATE_ETHICS = (
     "is a debate that never taught anything."
 )
 
-# ── Debate styles / modes (v13.1, RhetoricX — user-directed 2026-08-19) ──
+# ── Debate styles / modes (v13.1 — user-directed 2026-08-19) ──
 # Injected when the learner profile carries a matching style. Socratic was
 # an existing profile style; heckler + boardroom are new modes.
 _STYLE_PROMPTS = {

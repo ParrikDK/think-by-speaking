@@ -246,7 +246,7 @@ async def get_stats(user_id: str, include_recent: bool = False) -> dict:
 
 
 async def debate_trends(user_id: str, limit: int = 10) -> dict:
-    """RhetoricX memory (v13.1) — the moat: per-user debate analytics
+    """Think By Speaking memory (v13.1) — the moat: per-user debate analytics
     aggregated from the stored feedback cards. Progress persists across
     sessions: avg/best score, fallacy totals by type, filler totals, and a
     per-session score history for trend bars."""
