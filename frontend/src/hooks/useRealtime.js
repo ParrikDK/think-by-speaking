@@ -17,7 +17,7 @@
 // still pass through untranslated.
 import { useEffect, useRef, useState } from 'react';
 import { getToken, realtimeWsUrl } from '../api';
-import { autocorrF0, stddev } from '../utils/audioMetrics';
+import { pitchVariance } from '../utils/audioMetrics';
 
 const MAX_RECONNECTS = 3;
 
@@ -152,7 +152,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
       currentTutorIdRef.current = id;
       setActiveTutorId(id);
       setMessages((prev) => [...prev, {
-        id, role: 'tutor', text: '', romanization: null, replay: false, turn: null,
+        id, role: 'tutor', text: '', replay: false, turn: null,
       }]);
       return id;
     };
@@ -182,7 +182,6 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
         role: 'user',
         text: ev.transcript_unclear ? '' : text,
         unclear: !!ev.transcript_unclear,
-        romanization: null,
         feedback: null,
         turn: ev.turn ?? null,
       };
@@ -439,7 +438,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
         case 'response.audio_transcript.done': {
           const id = currentTutorIdRef.current;
           if (id != null && ev.transcript) {
-            updateMessage(id, { text: ev.transcript, romanization: ev.romanization || null });
+            updateMessage(id, { text: ev.transcript });
             registerTurn(ev.turn, 'tutorId', id);
           }
           break;
@@ -654,12 +653,7 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
             const mono = new Float32Array(total);
             let o = 0;
             for (const c of chunks) { for (let i = 0; i < c.length; i++) mono[o++] = c[i] / 32768; }
-            const f0s = [];
-            for (let off = 0; off + 2048 < mono.length; off += 1024) {
-              const f0 = autocorrF0(mono.subarray(off, off + 2048), 16000);
-              if (f0) f0s.push(f0);
-            }
-            pitchVar = Math.round(stddev(f0s) * 10) / 10;
+            pitchVar = Math.round(pitchVariance(mono, 16000) * 10) / 10;
           }
           if (secs > 0.5 || pitchVar > 0) {
             ws.send(JSON.stringify({

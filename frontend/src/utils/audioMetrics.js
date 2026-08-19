@@ -13,20 +13,22 @@ const FRAME = 2048;   // samples per analysis frame
 const HOP = 1024;     // frame advance
 const MIN_F0 = 60;    // Hz
 const MAX_F0 = 400;   // Hz
+const ANALYZE_RATE = 16000;  // F0 is 60-400 Hz; 8 kHz Nyquist suffices
 
 export function autocorrF0(frame, sampleRate) {
   const minLag = Math.floor(sampleRate / MAX_F0);
   const maxLag = Math.floor(sampleRate / MIN_F0);
   let bestLag = -1;
   let bestScore = 0;
+  // Frame energy is lag-independent — compute once (efficiency review).
+  let den = 0;
+  for (let i = 0; i < frame.length; i++) den += frame[i] * frame[i];
+  if (den <= 0) return null;
   for (let lag = minLag; lag <= maxLag; lag++) {
     let num = 0;
-    let den = 0;
     for (let i = 0; i + lag < frame.length; i++) {
       num += frame[i] * frame[i + lag];
-      den += frame[i] * frame[i];
     }
-    if (den <= 0) continue;
     const score = num / den;
     if (score > bestScore) {
       bestScore = score;
@@ -35,6 +37,28 @@ export function autocorrF0(frame, sampleRate) {
   }
   if (bestLag <= 0 || bestScore < 0.4) return null;  // voiceless/noise frame
   return sampleRate / bestLag;
+}
+
+// Pitch variance over a mono signal: decimate to 16 kHz first (~9x less
+// work), scan frames, return the F0 stddev. Shared by the recorded-turn
+// analysis and the realtime PTT path.
+export function pitchVariance(mono, sampleRate) {
+  if (!mono || mono.length < FRAME) return 0;
+  const rate = sampleRate || ANALYZE_RATE;
+  // Decimate to ANALYZE_RATE by stride-sampling (F0 < 400 Hz).
+  let src = mono;
+  if (rate > ANALYZE_RATE) {
+    const stride = Math.round(rate / ANALYZE_RATE);
+    const n = Math.floor(mono.length / stride);
+    src = new Float32Array(n);
+    for (let i = 0; i < n; i++) src[i] = mono[i * stride];
+  }
+  const f0s = [];
+  for (let off = 0; off + FRAME < src.length; off += HOP) {
+    const f0 = autocorrF0(src.subarray(off, off + FRAME), ANALYZE_RATE);
+    if (f0) f0s.push(f0);
+  }
+  return stddev(f0s);
 }
 
 export function stddev(values) {
@@ -50,13 +74,9 @@ export async function analyzeAudio(blob) {
     const buf = await ac.decodeAudioData(await blob.arrayBuffer());
     const mono = buf.getChannelData(0);
     const audioSecs = mono.length / buf.sampleRate;
-    const f0s = [];
-    for (let off = 0; off + FRAME < mono.length; off += HOP) {
-      const f0 = autocorrF0(mono.subarray(off, off + FRAME), buf.sampleRate);
-      if (f0) f0s.push(f0);
-    }
+    const pv = pitchVariance(mono, buf.sampleRate);
     await ac.close();
-    return { audioSecs: Math.round(audioSecs * 10) / 10, pitchVar: Math.round(stddev(f0s) * 10) / 10 };
+    return { audioSecs: Math.round(audioSecs * 10) / 10, pitchVar: Math.round(pv * 10) / 10 };
   } catch {
     // decode failure (unlikely for MediaRecorder output) — degrade to no
     // metrics rather than blocking the turn.

@@ -146,28 +146,22 @@ export default function SetupScreen({
             options matching the session kind — realtime sessions can only
             use qwen presets, cascade sessions edge/elevenlabs voices.
             Hidden when only one option. */}
-        {(() => {
-          const usable = voices.filter((v) =>
-            targetLang?.realtime ? v.provider === 'realtime' : v.provider !== 'realtime'
-          );
-          if (usable.length <= 1) return null;
-          return (
-            <section className="setup-section">
-              <h2 className="setup-title">{t('voice.title')}</h2>
-              <div className="setup-chips">
-                {usable.map((v) => (
-                  <button
-                    key={v.voice_id}
-                    className={`setup-chip ${voiceId === v.voice_id ? 'setup-chip-active' : ''}`}
-                    onClick={() => onVoiceSelect(v.voice_id)}
-                  >
-                    {v.name}
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        })()}
+        {voices.length > 1 && (
+          <section className="setup-section">
+            <h2 className="setup-title">{t('voice.title')}</h2>
+            <div className="setup-chips">
+              {voices.map((v) => (
+                <button
+                  key={v.voice_id}
+                  className={`setup-chip ${voiceId === v.voice_id ? 'setup-chip-active' : ''}`}
+                  onClick={() => onVoiceSelect(v.voice_id)}
+                >
+                  {v.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Optional subject — dropdown (10 options incl. free debate; >4 →
             dropdown per user-directed 2026-08-16 rule) */}

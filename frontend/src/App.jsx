@@ -72,7 +72,7 @@ export default function App() {
   const [level, setLevel] = useState('beginner');
   const [scenario, setScenario] = useState(null); // null = free talk
   const [profile, setProfile] = useState(loadProfile); // v13: interests + style
-  const [voices, setVoices] = useState([]);
+  const [voices, setVoices] = useState([]);  // already filtered to the session kind
   // v13 voice picker: British male default (user-directed 2026-08-18)
   const [voiceId, setVoiceId] = useState('en-GB-RyanNeural');
 
@@ -136,10 +136,11 @@ export default function App() {
     getVoices(targetLang.code)
       .then((list) => {
         if (cancelled || !Array.isArray(list)) return;
-        setVoices(list);
+        // v13.1: filter once here — SetupScreen renders the same list.
         const usable = list.filter((v) =>
           targetLang.realtime ? v.provider === 'realtime' : v.provider !== 'realtime'
         );
+        setVoices(usable);
         if (usable.length && !usable.some((v) => v.voice_id === voiceId)) {
           setVoiceId(usable[0].voice_id);
         }

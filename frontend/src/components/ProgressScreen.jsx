@@ -113,13 +113,7 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
                 <h2 className="section-title">{t('progress.by_language')}</h2>
                 <div className="card" style={{ padding: 18 }}>
                   {langEntries.map(([code, v]) => (
-                    <div key={code} className="bar-row">
-                      <span className="bar-name">{langLabel(code)}</span>
-                      <span className="bar-track">
-                        <span className="bar-fill" style={{ width: `${Math.round(((v?.sessions || 0) / maxSessions) * 100)}%` }} />
-                      </span>
-                      <span className="bar-count">{v?.sessions || 0}</span>
-                    </div>
+                    <BarRow key={code} label={langLabel(code)} value={v?.sessions || 0} max={maxSessions} />
                   ))}
                 </div>
               </section>
@@ -190,13 +184,7 @@ function DebateAnalytics({ d, t }) {
         <div className="card" style={{ padding: 18, marginTop: 14 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {history.map((h) => (
-              <div key={h.session_id} className="bar-row">
-                <span className="bar-name">{h.avg_score}</span>
-                <span className="bar-track">
-                  <span className="bar-fill" style={{ width: `${Math.round(((h.avg_score || 0) / maxScore) * 100)}%` }} />
-                </span>
-                <span className="bar-count">{h.turns} {t('progress.turns')}</span>
-              </div>
+              <BarRow key={h.session_id} label={h.avg_score} value={h.avg_score} max={maxScore} suffix={`${h.turns} ${t('progress.turns')}`} />
             ))}
           </div>
         </div>
@@ -205,12 +193,33 @@ function DebateAnalytics({ d, t }) {
       {fallacies.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
           {fallacies.map(([type, n]) => (
-            <span key={type} className="debate-fallacy" title={t('debate.fallacy.' + type, type)}>
-              ⚠️ {t('debate.fallacy.' + type, type.replace(/_/g, ' '))} ×{n}
-            </span>
+            <FallacyChip key={type} type={type} count={n} t={t} />
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+// Shared bar row (by-language + score history) and fallacy chip (also
+// used by DebateCard) — extracted during the /simplify pass.
+export function BarRow({ label, value, max, suffix }) {
+  return (
+    <div className="bar-row">
+      <span className="bar-name">{label}</span>
+      <span className="bar-track">
+        <span className="bar-fill" style={{ width: `${Math.round(((value || 0) / max) * 100)}%` }} />
+      </span>
+      <span className="bar-count">{value} {suffix}</span>
+    </div>
+  );
+}
+
+export function FallacyChip({ type, count, t }) {
+  const label = t('debate.fallacy.' + type, type.replace(/_/g, ' '));
+  return (
+    <span className="debate-fallacy" title={label}>
+      ⚠️ {label}{count != null ? ` ×${count}` : ''}
+    </span>
   );
 }

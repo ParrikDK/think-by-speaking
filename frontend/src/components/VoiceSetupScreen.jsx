@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { hostLine, setupVoiceParse } from '../api';
+import useAudioPlayback from '../hooks/useAudioPlayback';
 import { useT } from '../i18n/useI18n';
+import { startRecorder } from '../utils/capture';
+import { pickRecorderMime } from '../utils/recorder';
 
 /**
  * Voice-guided setup (v13.1, "grandma mode" v1) — the host speaks numbered
@@ -30,31 +33,40 @@ export default function VoiceSetupScreen({ scenarios, onBack, onStart }) {
   const [retries, setRetries] = useState(0);
   const [status, setStatus] = useState('');
   const recorderRef = useRef(null);
-  const audioRef = useRef(null);
+  const { play } = useAudioPlayback();
+  const [hostAudio, setHostAudio] = useState({}); // question -> base64 (prefetched)
 
-  const say = useCallback(async (text) => {
-    setBusy(true);
-    try {
-      const { audio_base64 } = await hostLine(text);
-      const audio = new Audio(`data:audio/mpeg;base64,${audio_base64}`);
-      audioRef.current = audio;
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
-    } catch {
-      /* host speech is best-effort — the on-screen text still shows */
-    } finally {
+  // Prefetch all static host lines once at mount (efficiency review:
+  // no per-step TTS round trips).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(Object.entries(QUESTIONS).map(async ([key, text]) => {
+      try {
+        const { audio_base64 } = await hostLine(text);
+        return [key, audio_base64];
+      } catch {
+        return [key, null];
+      }
+    })).then((pairs) => {
+      if (!cancelled) setHostAudio(Object.fromEntries(pairs));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const say = useCallback(async (key) => {
+    const b64 = hostAudio[key];
+    if (b64) {
+      setBusy(true);
+      await play(b64);
       setBusy(false);
     }
-  }, []);
+  }, [hostAudio, play]);
 
   const currentStep = STEPS[stepIdx];
 
   useEffect(() => {
     if (stepIdx >= STEPS.length) {
-      say(QUESTIONS.done).then(() => {
+      say('done').then(() => {
         const s = answers.subject;
         const subjectObj = s && s !== 'free'
           ? scenarios.find((x) => x.id === s) || null
@@ -68,9 +80,13 @@ export default function VoiceSetupScreen({ scenarios, onBack, onStart }) {
       });
       return;
     }
-    say(QUESTIONS[currentStep]);
-    setStatus('');
-  }, [stepIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Only speak once the prefetched host audio for this step is ready —
+    // the mount-time question must not be silent.
+    if (hostAudio[currentStep]) {
+      say(currentStep);
+      setStatus('');
+    }
+  }, [stepIdx, hostAudio, currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleRecord = useCallback(async () => {
     if (recording) {
@@ -80,17 +96,16 @@ export default function VoiceSetupScreen({ scenarios, onBack, onStart }) {
       setStatus('listening');
       try {
         recorderRef.current?.stop();
-        const blob = await new Promise((resolve) => {
-          const rec = recorderRef.current;
-          rec.onstop = () => resolve(rec.blob || null);
-        });
+        const rec = recorderRef.current;
+        const blob = rec ? rec._getBlob() : null;
+        rec?._stream?.getTracks().forEach((tr) => tr.stop());
         if (!blob) throw new Error('no recording');
         const res = await setupVoiceParse(currentStep, blob);
         if (res.unclear) {
           if (retries < 2) {
             setRetries((r) => r + 1);
             setStatus('unclear');
-            await say(QUESTIONS.retry);
+            await say('retry');
             setStatus('');
           } else {
             // fall back to a sensible default rather than blocking
@@ -116,18 +131,19 @@ export default function VoiceSetupScreen({ scenarios, onBack, onStart }) {
       }
       return;
     }
-    // start recording (tap-to-record; beep cue would come from the host)
+    // start recording (tap-to-record; the shared capture helper handles
+    // mime picking incl. the iOS mp4 fallback)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
-      rec.chunks = [];
-      rec.ondataavailable = (e) => rec.chunks.push(e.data);
-      rec.onstop = () => {
-        rec.blob = new Blob(rec.chunks, { type: rec.mimeType || 'audio/webm' });
-        stream.getTracks().forEach((tr) => tr.stop());
-      };
-      rec.start();
+      const mime = pickRecorderMime();
+      let blobOut = null;
+      const rec = startRecorder(stream, mime, {
+        onBlob: (b) => { blobOut = b; },
+        suppressSendRef: { current: false },
+      });
       recorderRef.current = rec;
+      recorderRef.current._stream = stream;
+      recorderRef.current._getBlob = () => blobOut;
       setRecording(true);
       setStatus('');
     } catch {

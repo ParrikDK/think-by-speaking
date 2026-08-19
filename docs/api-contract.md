@@ -61,6 +61,24 @@ SSE stream of events: `event: token  data: {"text": "..."}` (REAL streamed LLM t
 ```
 Debate card semantics: `stance` judges the learner's claim (agree = essentially right, partially_agree = some truth some error, disagree = wrong or unsupported); `score` is the running debate score from the learner's viewpoint (start 50, ±8 max per turn, clamp 0-100); `score_delta` the signed change since the last turn; `counter`/`evidence`/`next` are read on screen, never spoken, always in the learner's native language.
 
+v13.1 card fields (the full shape is the contract — the client guest-memory
+aggregate mirrors it):
+- `fallacies`: at most 2 × `{type, quote, note}` — strawman, ad_hominem,
+  false_dilemma, red_herring, slippery_slope, appeal_to_authority,
+  hasty_generalization, no_true_scotsman, circular_reasoning, other
+- `structure`: one line on hook/premise-flow/evidence (learner's native)
+- `filler_count`: spoken hesitation markers (um/uh/like/you know/…),
+  counted server-side, spoken turns only
+- `delivery`: `{pace: words/sec, pitch: "monotone"|"varied"}` from the
+  client-measured audio (cascade `audio_secs`/`pitch_var` form fields;
+  realtime `turn_metrics` frame); pitch < 25 Hz variance = monotone
+
+`GET /api/stats` (Bearer) additionally returns `debate` (the persistent
+memory): `{sessions, turns, avg_score, best_score, fallacy_totals: {type:
+count}, filler_total, score_history: [{session_id, started_at, turns,
+avg_score, best}]}` — aggregated incrementally from stored cards. Guests
+mirror this shape client-side per device (localStorage).
+
 ### GET /api/history (Bearer) → `[{session_id, language, level, scenario_id, started_at, last_active, message_count}]`
 ### GET /api/history/{session_id} (Bearer) → `{session: {...}, messages: [{role, text, translation, grammar, created_at}]}` (the messages' `grammar` field carries the debate-card JSON; the DB column keeps its legacy name `grammar_json`)
 ### DELETE /api/history/{session_id} (Bearer) → `{ok: true}`
