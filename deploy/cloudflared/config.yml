@@ -1,0 +1,27 @@
+# Named Cloudflare tunnel — stable URL for Think By Speaking (v13.1).
+#
+# Unlike the quick tunnels (`*.trycloudflare.com`, random + die with the
+# process), a named tunnel bound to YOUR Cloudflare account gives a stable
+# hostname that reconnects automatically. Requires a domain on Cloudflare
+# (their free plan works) — e.g. debate.yourdomain.com.
+#
+# Setup (one time, ~5 minutes):
+#   1. cloudflared tunnel login            # opens a browser — pick your domain
+#   2. cloudflared tunnel create think-by-speaking
+#   3. cloudflared tunnel route dns think-by-speaking debate.yourdomain.com
+#      (replace debate.yourdomain.com with YOUR domain)
+#   4. cloudflared tunnel --config deploy/cloudflared/config.yml run think-by-speaking
+#      (run as a service: brew services start cloudflared)
+#
+# The URL is then permanent: https://debate.yourdomain.com → localhost:8000.
+# The tunnel auto-reconnects; it only goes down when this machine sleeps.
+# For a 24/7 link that survives this laptop, use the VPS path instead
+# (deploy/docker-compose.yml + deploy/Caddyfile).
+
+tunnel: think-by-speaking
+credentials-file: /Users/parrik/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: debate.yourdomain.com
+    service: http://localhost:8000
+  - service: http_status:404
