@@ -78,11 +78,17 @@ volume under Docker.
 
 ## Features
 
-- ⚔️ **Debate mode**: pick a subject (9 starter subjects + free debate) and argue with a coach that challenges your claims
+- ⚔️ **Three-speaker debate**: a neutral **moderator** frames the motion and keeps the debate fair, then a **coach** argues back — evidence, steelmanning, fallacy radar, and a live score — while you speak
+- 🎬 **Framing phase**: the moderator defines the topic and rules before any scoring — your opening position statement earns no score
+- ⚖️ **Moderator on by default**: interjects on every second turn, reading out scores and asking clarifying questions — toggle it off for a pure coach–you exchange
 - 📈 **Debate scoring**: every turn earns a score card — stance, counter-argument, one piece of evidence, next challenge
 - 🎯 **Personalized to you**: your interests and debate style (devil's advocate / Socratic / encouraging) shape every session — the coach's examples, stakes, and challenges bend toward you
 - 🗣️ **Voice-first**: speak your arguments — real-time speech-to-text, natural voice replies, replay at 0.5× / 1× / 2×
+- 🎤 **Voice picker**: pick the coach's voice — British male by default, switch anytime
 - 🎙️ **Hands-free mode**: on-device Silero VAD auto-detects end of speech, barge-in support — runs on the Qwen realtime speech-to-speech bridge (26 of the 31 languages; the rest fall back to the cascade engine)
+- 🔁 **Spoken session recap**: the moderator reads out your scores and takeaways when the debate ends
+- 🗺️ **Voice-guided setup ("grandma mode")**: the moderator asks the setup questions — nothing to read, no forms to fill
+- 💾 **Guest device memory**: debates as a guest are remembered on your device, ready to sync to an account
 - ⌨️ **Typed input mode** — text chat with the same coach
 - 👤 Optional accounts: session history, resume, progress dashboard, streaks
 - 🌍 31 debate languages, UI translated into 28 languages
