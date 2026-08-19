@@ -12,6 +12,7 @@ import {
 } from './api';
 import STATIC_LANGUAGES from './i18n/languages';
 import { analyzeAudio } from './utils/audioMetrics';
+import { recordGuestCard } from './utils/guestStats';
 import { useT } from './i18n/useI18n';
 
 const STATIC_TARGET_LANGUAGES = STATIC_LANGUAGES.map((l) => ({
@@ -240,6 +241,11 @@ export default function App() {
       const reply = res.reply || {};
       const userText = res.user_text ?? (isTyped ? text : '');
       const errorType = res.error_type || null;
+
+      // v13.1 guest memory: device-local analytics for logged-out users
+      if (!user && reply.feedback) {
+        recordGuestCard(reply.feedback, targetLang?.code);
+      }
 
       setMessages((prev) => prev.map((m) => {
         if (m.id === userId) {

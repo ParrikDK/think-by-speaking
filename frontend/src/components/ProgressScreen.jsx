@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getStats } from '../api';
+import { aggregateGuestTurns } from '../utils/guestStats';
 import { useT } from '../i18n/useI18n';
 
 export default function ProgressScreen({ lang, user, languages, onResume, onBack, onLoginRequest }) {
@@ -22,13 +23,31 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
     return l ? (l.name || l.native_name) : code;
   }, [languages]);
 
+  // v13.1 guest memory: device-local analytics shown without an account
+  const guestDebate = !user ? aggregateGuestTurns() : null;
+
   if (!user) {
     return (
       <div className="screen">
         <div className="container">
-          <button className="btn btn-ghost" onClick={onBack}>{t('common.back')}</button>
-          <div className="empty-state">
-            <div className="empty-state-icon">🔒</div>
+          <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 12 }}>{t('common.back')}</button>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 600, margin: '0 0 4px' }}>{t('progress.title')}</h1>
+          <p style={{ fontSize: 14, color: 'var(--color-ink-muted)', margin: '0 0 24px' }}>{t('progress.sub')}</p>
+
+          <div className="card" style={{ padding: 18, marginBottom: 16 }}>
+            <p style={{ fontSize: 14, margin: 0 }}>📱 {t('progress.device_memory')}</p>
+          </div>
+
+          {guestDebate ? (
+            <DebateAnalytics d={guestDebate} t={t} />
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon">🌱</div>
+              <p className="empty-state-sub">{t('progress.empty')}</p>
+            </div>
+          )}
+
+          <div className="empty-state" style={{ marginTop: 8 }}>
             <p className="empty-state-sub">{t('progress.login_prompt')}</p>
             <button className="btn btn-primary btn-sm" onClick={onLoginRequest}>{t('auth.login')}</button>
           </div>
@@ -106,63 +125,10 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
               </section>
             )}
 
-            {/* Debate analytics — persistent
-                progress that is the moat. */}
             {(() => {
               const d = stats?.debate || {};
-              const history = Array.isArray(d.score_history) ? d.score_history : [];
-              const fallacies = Object.entries(d.fallacy_totals || {});
-              const maxScore = Math.max(100, ...history.map((h) => h.avg_score || 0));
               if (!d.turns) return null;
-              return (
-                <section style={{ marginBottom: 28 }}>
-                  <h2 className="section-title">{t('progress.debate_analytics')}</h2>
-                  <div className="stat-grid">
-                    <div className="card stat-card">
-                      <div className="stat-value">{d.avg_score ?? 0}</div>
-                      <div className="stat-label">{t('progress.avg_score')}</div>
-                    </div>
-                    <div className="card stat-card">
-                      <div className="stat-value">{d.best_score ?? 0}</div>
-                      <div className="stat-label">{t('progress.best_score')}</div>
-                    </div>
-                    <div className="card stat-card">
-                      <div className="stat-value">{d.sessions ?? 0}</div>
-                      <div className="stat-label">{t('progress.debates')}</div>
-                    </div>
-                    <div className="card stat-card">
-                      <div className="stat-value">{d.filler_total ?? 0}</div>
-                      <div className="stat-label">{t('progress.fillers')}</div>
-                    </div>
-                  </div>
-
-                  {history.length > 0 && (
-                    <div className="card" style={{ padding: 18, marginTop: 14 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {history.map((h) => (
-                          <div key={h.session_id} className="bar-row">
-                            <span className="bar-name">{h.avg_score}</span>
-                            <span className="bar-track">
-                              <span className="bar-fill" style={{ width: `${Math.round(((h.avg_score || 0) / maxScore) * 100)}%` }} />
-                            </span>
-                            <span className="bar-count">{h.turns} {t('progress.turns')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {fallacies.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                      {fallacies.map(([type, n]) => (
-                        <span key={type} className="debate-fallacy" title={t('debate.fallacy.' + type, type)}>
-                          ⚠️ {t('debate.fallacy.' + type, type.replace(/_/g, ' '))} ×{n}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
+              return <DebateAnalytics d={d} t={t} />;
             })()}
 
             {recent.length > 0 && (
@@ -189,5 +155,62 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
         )}
       </div>
     </div>
+  );
+}
+
+// Shared debate-analytics section (logged-in server data or guest device
+// memory — same shape, same look).
+function DebateAnalytics({ d, t }) {
+  const history = Array.isArray(d.score_history) ? d.score_history : [];
+  const fallacies = Object.entries(d.fallacy_totals || {});
+  const maxScore = Math.max(100, ...history.map((h) => h.avg_score || 0));
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <h2 className="section-title">{t('progress.debate_analytics')}</h2>
+      <div className="stat-grid">
+        <div className="card stat-card">
+          <div className="stat-value">{d.avg_score ?? 0}</div>
+          <div className="stat-label">{t('progress.avg_score')}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-value">{d.best_score ?? 0}</div>
+          <div className="stat-label">{t('progress.best_score')}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-value">{d.sessions ?? 0}</div>
+          <div className="stat-label">{t('progress.debates')}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-value">{d.filler_total ?? 0}</div>
+          <div className="stat-label">{t('progress.fillers')}</div>
+        </div>
+      </div>
+
+      {history.length > 0 && (
+        <div className="card" style={{ padding: 18, marginTop: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {history.map((h) => (
+              <div key={h.session_id} className="bar-row">
+                <span className="bar-name">{h.avg_score}</span>
+                <span className="bar-track">
+                  <span className="bar-fill" style={{ width: `${Math.round(((h.avg_score || 0) / maxScore) * 100)}%` }} />
+                </span>
+                <span className="bar-count">{h.turns} {t('progress.turns')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fallacies.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+          {fallacies.map(([type, n]) => (
+            <span key={type} className="debate-fallacy" title={t('debate.fallacy.' + type, type)}>
+              ⚠️ {t('debate.fallacy.' + type, type.replace(/_/g, ' '))} ×{n}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

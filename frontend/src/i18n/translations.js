@@ -1398,6 +1398,7 @@ const extra = {
     "progress.debates": "Debates",
     "progress.fillers": "Fillers",
     "progress.turns": "turns",
+    "progress.device_memory": "Your debates live on this device. Log in to sync them across devices.",
     "progress.recent": "Recent sessions",
     "progress.empty": "Nothing here yet. Have your first debate!",
     "progress.login_prompt": "Log in to track your progress.",
