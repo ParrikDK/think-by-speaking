@@ -639,3 +639,11 @@ def test_no_metrics_no_delivery(client, fake_upstream, monkeypatch):
     card = next(e for e in events if e["type"] == "proxy.feedback")
     assert "delivery" not in card
     assert card["filler_count"] == 0
+
+
+def test_non_realtime_voice_falls_back_to_preset(client, fake_upstream):
+    """An edge/ElevenLabs voice id must never reach the qwen engine — the
+    bridge falls back to the language preset (v13.1 regression guard)."""
+    with client.websocket_connect(ws_url(lang="en", voice="en-GB-RyanNeural")) as ws:
+        update = fake_upstream.wait_for("session.update")
+    assert update["session"]["voice"] == "Jennifer"  # en preset, not the edge id

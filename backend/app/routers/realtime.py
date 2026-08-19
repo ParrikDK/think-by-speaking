@@ -22,7 +22,7 @@ from ..config import get_settings
 from ..db import usage_store
 from ..db.user_store import user_store
 from ..prompts import get_scenario
-from ..prompts.realtime_personas import voice_for
+from ..prompts.realtime_personas import _VOICES, voice_for
 from ..prompts.tutor import LANGUAGE_NAMES, VALID_LEVELS
 from ..realtime import qwen_bridge
 from ..realtime.languages import supports_realtime
@@ -156,6 +156,12 @@ async def realtime_ws(
     #     return
     user_id = user.id if user else ""
     profile_data = _parse_profile(profile)
+    # v13.1: the voice param must be a KNOWN realtime preset — an edge or
+    # ElevenLabs voice id reaching the qwen engine errors upstream with
+    # "Voice 'X' is not supported". Fall back to the language preset.
+    if voice and voice not in _VOICES.values():
+        logger.warning("ignoring non-realtime voice {!r} for lang {}", voice, lang)
+        voice = None
 
     session = await create_session(
         lang, level, native, scenario, voice_for(lang), user, profile_data

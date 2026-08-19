@@ -141,7 +141,11 @@ export function realtimeWsUrl({ lang, level, mode, scenarioId, native, cont, pro
   if (profile && Object.keys(profile).length > 0) {
     params.set('profile', JSON.stringify(profile)); // URLSearchParams encodes
   }
-  if (voice) params.set('voice', voice);
+  // v13.1: only realtime presets may ride the WS — edge/ElevenLabs ids
+  // (e.g. 'en-GB-RyanNeural') would be rejected upstream with a 400.
+  if (voice && !voice.includes('-Neural') && !/^[a-zA-Z0-9]{15,30}$/.test(voice)) {
+    params.set('voice', voice);
+  }
   const token = getToken();
   if (token) params.set('token', token);
   if (cont) params.set('cont', '1');
