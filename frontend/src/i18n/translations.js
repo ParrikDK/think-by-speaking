@@ -1320,6 +1320,8 @@ const extra = {
     "grammar.correction": "Coach's rebuttal",
 
     // Coach voice (v13)
+    "voice_setup.title": "Voice setup",
+    "voice_setup.entry": "Voice setup — answer by speaking",
     "voice.title": "Coach voice?",
     "voice.desc": "Your coach's voice — accent and gender.",
 

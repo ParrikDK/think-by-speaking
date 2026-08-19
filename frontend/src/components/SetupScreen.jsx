@@ -47,7 +47,7 @@ export default function SetupScreen({
   lang, uiLang, onUiLangChange, languages, scenarios,
   targetLang, level, profile, voices, voiceId, user,
   onLogin, onLogout, onProgress, onStart,
-  onTargetSelect, onLevelSelect, onProfileChange, onVoiceSelect,
+  onTargetSelect, onLevelSelect, onProfileChange, onVoiceSelect, onVoiceSetup,
 }) {
   const t = useT(lang);
   const [scenarioId, setScenarioId] = useState('');
@@ -229,6 +229,11 @@ export default function SetupScreen({
         <button className="btn btn-primary setup-cta" disabled={!ready} onClick={begin}>
           {t('welcome.cta')}
         </button>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onVoiceSetup}>
+            🎙️ {t('voice_setup.entry')}
+          </button>
+        </div>
       </div>
     </div>
   );

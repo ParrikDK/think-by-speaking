@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, startTransition } from 'react';
 import SetupScreen from './components/SetupScreen';
+import VoiceSetupScreen from './components/VoiceSetupScreen';
 import AuthModal from './components/AuthModal';
 import LoadingScreen from './components/LoadingScreen';
 import ChatScreen from './components/ChatScreen';
@@ -394,9 +395,18 @@ export default function App() {
             setTargetLang({ code: l.code, name: l.english, native_name: l.native, realtime: !!fromApi?.realtime });
           }}
           onLevelSelect={setLevel}
+          onVoiceSetup={() => setScreen('voicesetup')}
           onStart={({ langObj, lvl, scenarioObj, profile: p }) =>
             startChat({ langObj, lvl, scenarioObj, profile: p })
           }
+        />
+      )}
+
+      {screen === 'voicesetup' && (
+        <VoiceSetupScreen
+          scenarios={scenarios}
+          onBack={() => setScreen('setup')}
+          onStart={startChat}
         />
       )}
 

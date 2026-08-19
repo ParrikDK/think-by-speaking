@@ -34,6 +34,7 @@ from .routers import (
     auth,
     chat,
     health,
+    setup,
     history,
     languages,
     realtime,
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     application.include_router(chat.router, prefix="/api")
     application.include_router(realtime.router, prefix="/api")
     application.include_router(history.router, prefix="/api")
+    application.include_router(setup.router, prefix="/api")
     application.include_router(stats.router, prefix="/api")
 
     # ── Static frontend with SPA fallback (after API routes) ──

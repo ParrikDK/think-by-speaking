@@ -170,6 +170,35 @@ export async function initChat({ language, nativeLanguage, level, scenarioId, vo
   return res.json(); // {session_id, greeting: TurnPayload}
 }
 
+/** Voice-guided setup (v13.1): map one spoken answer to a wizard step. */
+export async function setupVoiceParse(step, audioBlob, language = 'en') {
+  const form = new FormData();
+  form.append('step', step);
+  form.append('language', language);
+  form.append('audio', audioBlob, 'answer.webm');
+  const res = await fetch(`${API_BASE}/setup/voice`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, `Voice setup failed (${res.status})`));
+  return res.json(); // {transcript, unclear, choice, label}
+}
+
+/** Host-voice line for the wizard (moderator voice TTS). */
+export async function hostLine(text, language = 'en') {
+  const form = new FormData();
+  form.append('text', text);
+  form.append('language', language);
+  const res = await fetch(`${API_BASE}/setup/host`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, `Host TTS failed (${res.status})`));
+  return res.json(); // {audio_base64}
+}
+
 /** Spoken session recap (v13.1): one coach turn over the whole session. */
 export async function summaryChat(sessionId, language) {
   const form = new FormData();
