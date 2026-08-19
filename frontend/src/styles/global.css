@@ -1672,3 +1672,131 @@ input, textarea, select {
   color: var(--color-ink-muted);
   margin-top: 2px;
 }
+
+/* ── Debate analytics (dataviz method, 2026-08-19) ────────────────── */
+/* Sequential hue for the score bars: the app's voice green, stepped for
+   dark. Categorical slots = validated reference palette (all checks pass
+   in the validator, light + dark). */
+.da-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;                      /* surface gap between adjacent bars */
+  height: 140px;
+  padding: 4px 2px 0;
+  border-bottom: 1px solid var(--color-border);  /* hairline baseline */
+}
+
+.da-bar {
+  position: relative;
+  flex: 0 0 24px;                /* cap the thickness — leave air */
+  max-width: 24px;
+  background: var(--color-voice);
+  border-radius: 4px 4px 0 0;    /* rounded data-end, square at baseline */
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.da-bar:hover {
+  background: var(--color-voice-dark);
+}
+
+.da-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--color-ink-muted);
+}
+
+.da-label-best {
+  color: var(--color-voice-dark);
+  font-weight: 600;
+}
+
+.da-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  z-index: 5;
+  min-width: 120px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.da-bar:hover .da-tip {
+  display: block;
+}
+
+.da-table {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+
+.da-table summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.da-table table {
+  margin-top: 8px;
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.da-table th, .da-table td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.da-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.da-fallacy-chip {
+  --chip: var(--cat-1);
+  background: color-mix(in srgb, var(--chip) 14%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--chip) 55%, var(--color-surface));
+  color: var(--color-ink);
+}
+
+/* Validated categorical slots (light). */
+:root {
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #008300;
+}
+
+/* Dark mode: selected from the same ramps, stepped for the dark surface. */
+@media (prefers-color-scheme: dark) {
+  .da-bar { background: #3987e5; }
+  .da-bar:hover { background: #5c9ff0; }
+  :root {
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+    --cat-6: #008300;
+  }
+}

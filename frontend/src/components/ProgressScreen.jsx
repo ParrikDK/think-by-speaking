@@ -154,10 +154,16 @@ export default function ProgressScreen({ lang, user, languages, onResume, onBack
 
 // Shared debate-analytics section (logged-in server data or guest device
 // memory — same shape, same look).
+// Debate analytics per the dataviz method (2026-08-19): score history as
+// single-hue sequential bars (height = magnitude, selective labels,
+// per-mark tooltips, hairline baseline, 2px gaps, 4px rounded data-ends),
+// fallacy breakdown as labeled chips tinted with validated categorical
+// slots in FIXED order (identity never color-alone), plus a table view.
 function DebateAnalytics({ d, t }) {
   const history = Array.isArray(d.score_history) ? d.score_history : [];
-  const fallacies = Object.entries(d.fallacy_totals || {});
+  const fallacies = Object.entries(d.fallacy_totals || {}).sort(([a], [b]) => (a < b ? -1 : 1));
   const maxScore = Math.max(100, ...history.map((h) => h.avg_score || 0));
+  const bestIdx = history.reduce((bi, h, i) => (h.avg_score > (history[bi]?.avg_score || 0) ? i : bi), 0);
   return (
     <section style={{ marginBottom: 28 }}>
       <h2 className="section-title">{t('progress.debate_analytics')}</h2>
@@ -182,18 +188,44 @@ function DebateAnalytics({ d, t }) {
 
       {history.length > 0 && (
         <div className="card" style={{ padding: 18, marginTop: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {history.map((h) => (
-              <BarRow key={h.session_id} label={h.avg_score} value={h.avg_score} max={maxScore} suffix={`${h.turns} ${t('progress.turns')}`} />
+          <div className="da-chart" role="img" aria-label={t('progress.score_history')}>
+            {history.map((h, i) => (
+              <div key={h.session_id} className="da-bar" style={{ height: `${Math.max(6, Math.round(((h.avg_score || 0) / maxScore) * 100))}%` }}>
+                <div className="da-tip">
+                  {t('progress.avg_score')}: {h.avg_score} · {h.turns} {t('progress.turns')}
+                  <br />{h.started_at ? h.started_at.slice(0, 10) : ''}
+                </div>
+                {/* selective labels: only the best session and the latest */}
+                {i === bestIdx && <span className="da-label da-label-best">{h.avg_score}</span>}
+                {i === history.length - 1 && i !== bestIdx && <span className="da-label">{h.avg_score}</span>}
+              </div>
             ))}
           </div>
+          <details className="da-table">
+            <summary>{t('progress.table_view')}</summary>
+            <table>
+              <thead>
+                <tr><th>{t('progress.date')}</th><th>{t('progress.avg_score')}</th><th>{t('progress.turns')}</th><th>{t('progress.best_score')}</th></tr>
+              </thead>
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.session_id}>
+                    <td>{h.started_at ? h.started_at.slice(0, 10) : ''}</td>
+                    <td>{h.avg_score}</td>
+                    <td>{h.turns}</td>
+                    <td>{h.best}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </div>
       )}
 
       {fallacies.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-          {fallacies.map(([type, n]) => (
-            <FallacyChip key={type} type={type} count={n} t={t} />
+        <div className="da-chips">
+          {fallacies.map(([type, n], i) => (
+            <FallacyChip key={type} type={type} count={n} t={t} slot={i + 1} />
           ))}
         </div>
       )}
@@ -215,11 +247,13 @@ export function BarRow({ label, value, max, suffix }) {
   );
 }
 
-export function FallacyChip({ type, count, t }) {
+export function FallacyChip({ type, count, t, slot }) {
   const label = t('debate.fallacy.' + type, type.replace(/_/g, ' '));
+  // Fixed categorical slot (validated palette order) — identity is carried
+  // by the label; the hue only reinforces it.
   return (
-    <span className="debate-fallacy" title={label}>
-      ⚠️ {label}{count != null ? ` ×${count}` : ''}
+    <span className="debate-fallacy da-fallacy-chip" style={{ '--chip': `var(--cat-${slot})` }} title={label}>
+      {label}{count != null ? ` ×${count}` : ''}
     </span>
   );
 }
