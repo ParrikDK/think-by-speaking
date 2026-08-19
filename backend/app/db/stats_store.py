@@ -241,4 +241,71 @@ async def get_stats(user_id: str, include_recent: bool = False) -> dict:
     if include_recent:
         stats["streak_days"] = await _streak_days(user_id)
         stats["recent_sessions"] = (await list_sessions(user_id))[:5]
+        stats["debate"] = await debate_trends(user_id)
     return stats
+
+
+async def debate_trends(user_id: str, limit: int = 10) -> dict:
+    """RhetoricX memory (v13.1) — the moat: per-user debate analytics
+    aggregated from the stored feedback cards. Progress persists across
+    sessions: avg/best score, fallacy totals by type, filler totals, and a
+    per-session score history for trend bars."""
+    import json
+
+    db = get_db()
+    async with db.execute(
+        """
+        SELECT s.id AS session_id, s.started_at, m.grammar_json
+        FROM messages m JOIN sessions s ON s.id = m.session_id
+        WHERE s.user_id = ? AND m.role = 'assistant' AND m.grammar_json IS NOT NULL
+        ORDER BY m.created_at
+        """,
+        (user_id,),
+    ) as cur:
+        rows = await cur.fetchall()
+
+    per_session: dict[str, dict] = {}
+    totals = {"turns": 0, "score_sum": 0, "best": 0, "fallacies": {}, "fillers": 0}
+    for r in rows:
+        try:
+            card = json.loads(r["grammar_json"])
+        except Exception:
+            continue
+        if not isinstance(card, dict) or "score" not in card:
+            continue
+        score = int(card.get("score") or 50)
+        sid = r["session_id"]
+        seg = per_session.setdefault(
+            sid, {"started_at": r["started_at"], "score_sum": 0, "turns": 0, "scores": []}
+        )
+        seg["score_sum"] += score
+        seg["turns"] += 1
+        seg["scores"].append(score)
+        totals["turns"] += 1
+        totals["score_sum"] += score
+        totals["best"] = max(totals["best"], score)
+        totals["fillers"] += int(card.get("filler_count") or 0)
+        for f in card.get("fallacies") or []:
+            if isinstance(f, dict) and f.get("type"):
+                totals["fallacies"][f["type"]] = totals["fallacies"].get(f["type"], 0) + 1
+
+    history = [
+        {
+            "session_id": sid,
+            "started_at": seg["started_at"],
+            "turns": seg["turns"],
+            "avg_score": round(seg["score_sum"] / seg["turns"]),
+            "best": max(seg["scores"]),
+        }
+        for sid, seg in per_session.items()
+    ]
+    history.sort(key=lambda h: h["started_at"], reverse=True)
+    return {
+        "sessions": len(per_session),
+        "turns": totals["turns"],
+        "avg_score": round(totals["score_sum"] / totals["turns"]) if totals["turns"] else 0,
+        "best_score": totals["best"],
+        "fallacy_totals": totals["fallacies"],
+        "filler_total": totals["fillers"],
+        "score_history": history[:limit],
+    }

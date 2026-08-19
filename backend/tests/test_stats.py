@@ -2,6 +2,7 @@
 USER message (a bare session row no longer counts); total_minutes clamps
 each session to ≤60 min and ignores sessions without user messages."""
 import asyncio
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -89,3 +90,37 @@ def test_total_minutes_clamped_and_requires_user_message(client):
 
     stats = _run(stats_store.get_stats(user))
     assert stats["total_minutes"] == 80  # 60 (clamped) + 0 + 20
+
+
+# ── RhetoricX memory (v13.1): debate_trends aggregation ─────────────
+
+def test_debate_trends_aggregates_cards(client):
+    """Two sessions with feedback cards → avg/best score, fallacy totals,
+    filler totals and per-session history."""
+
+    async def _seed_and_check():
+        user_id = _uid()
+        db = get_db()
+        for s_idx, (scores, fallacy_lists, fillers) in enumerate([
+            ([60, 66], [[{"type": "strawman"}], [{"type": "strawman"}]], [3, 1]),
+            ([52], [[{"type": "red_herring"}, {"type": "strawman"}]], [2]),
+        ]):
+            sid = await _insert_session(user_id, datetime(2026, 8, 19, 10, 0, tzinfo=timezone.utc), datetime(2026, 8, 19, 10, 10, tzinfo=timezone.utc))
+            for i, (score, fally, filler) in enumerate(zip(scores, fallacy_lists, fillers)):
+                await db.execute(
+                    "INSERT INTO messages (session_id, seq, role, text, grammar_json, created_at) VALUES (?, ?, 'assistant', 'ok', ?, ?)",
+                    (sid, i, json.dumps({"score": score, "fallacies": fally, "filler_count": filler}), _iso(datetime(2026, 8, 19, 10, 0, i, tzinfo=timezone.utc))),
+                )
+        await db.commit()
+        trends = await stats_store.debate_trends(user_id)
+        assert trends["sessions"] == 2
+        assert trends["turns"] == 3
+        assert trends["avg_score"] == round((60 + 66 + 52) / 3)
+        assert trends["best_score"] == 66
+        assert trends["filler_total"] == 6
+        assert trends["fallacy_totals"] == {"strawman": 3, "red_herring": 1}
+        assert len(trends["score_history"]) == 2
+        first = trends["score_history"][0]
+        assert first["avg_score"] == 52 and first["turns"] == 1
+
+    _run(_seed_and_check())

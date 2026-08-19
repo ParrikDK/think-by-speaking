@@ -99,6 +99,7 @@ class Stats(BaseModel):
 
 
 class FullStats(Stats):
+    debate: dict = Field(default_factory=dict)
     streak_days: int = 0
     recent_sessions: list[SessionSummary] = []
 
