@@ -94,7 +94,7 @@ export default function RealtimeChatScreen({
   // goes through the shared card-read controller in DebateCard (barge-in).
   useEffect(() => {
     speakCardRef.current = (feedback) => {
-      if (!voiceFirstRef.current) return; // toggle off → cards stay screen-only
+      if (!voiceFirstRef.current && !listenModeRef.current) return; // off → screen-only
       const text = composeCardSpeech(feedback, t);
       if (!text) return;
       speakHostLine(text, lang, { stop: cardStop, play: cardPlay });
@@ -105,6 +105,15 @@ export default function RealtimeChatScreen({
     const next = !voiceFirst;
     voiceFirstRef.current = next;
     setVoiceFirst(next);
+  };
+
+  // v13.2 listen mode: ears-only — the message list hides, cards always
+  // speak (voice-first forced on), the VAD meter stays front and center.
+  const handleListenMode = () => {
+    const next = !listenMode;
+    listenModeRef.current = next;
+    setListenMode(next);
+    if (next) voiceFirstRef.current = true;  // everything spoken in listen mode
   };
 
   const rt = useRealtime({
@@ -119,6 +128,8 @@ export default function RealtimeChatScreen({
   const { mode, pttDown, pttRelease, pttSetCancel } = rt;
 
   const [typed, setTyped] = useState('');
+  const [listenMode, setListenMode] = useState(false); // v13.2: ears-only UI
+  const listenModeRef = useRef(false);
   const chatRef = useRef(null);
 
   const langTag = langTagFor(targetLang.code);
@@ -220,6 +231,15 @@ export default function RealtimeChatScreen({
         <span className="topbar-spacer" />
         <button
           type="button"
+          className={`rt-mini ${listenMode ? 'rt-mini-active' : ''}`}
+          aria-pressed={listenMode}
+          title={t('chat.listen_mode', 'Listen mode')}
+          onClick={handleListenMode}
+        >
+          🎧 {t('chat.listen_mode', 'Listen')}
+        </button>
+        <button
+          type="button"
           className={`rt-mini ${voiceFirst ? 'rt-mini-active' : ''}`}
           aria-pressed={voiceFirst}
           title={t('chat.voice_first', 'Voice-first')}
@@ -249,6 +269,28 @@ export default function RealtimeChatScreen({
         <div className="rt-banner" role="alert">{t(rt.banner, rt.banner)}</div>
       )}
 
+      {listenMode ? (
+        <main className="rt-listen" aria-live="polite">
+          <div className="rt-listen-vad">
+            <div className="rt-listen-bars">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span
+                  key={i}
+                  className={`rt-listen-bar ${rt.micLevel > (i + 0.5) / 5 ? 'rt-listen-bar-live' : ''}`}
+                />
+              ))}
+            </div>
+            <div className="rt-listen-status">
+              {rt.pttHeld
+                ? t('rt.release_to_send')
+                : rt.tutorSpeaking
+                  ? t('rt.tutor_speaking')
+                  : (mode === 'ptt' ? t('rt.hold_to_talk') : t('rt.listening'))}
+            </div>
+            <div className="rt-listen-hint">{t('chat.listen_hint')}</div>
+          </div>
+        </main>
+      ) : (
       <main className="rt-chat" ref={chatRef} aria-live="polite">
         {rt.messages.length === 0 && !rt.quotaCard && (
           <div className="rt-empty">
@@ -297,7 +339,7 @@ export default function RealtimeChatScreen({
           </div>
         )}
       </main>
-
+      )}
       <div className="rt-dock">
         <div className="rt-type-row">
           <input

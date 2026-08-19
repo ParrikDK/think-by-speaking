@@ -1317,6 +1317,8 @@ const extra = {
     "chat.vad_error": "Mic error",
     "chat.error_tts_regen": "Audio generation failed",
     "chat.voice_first": "Voice-first",
+    "chat.listen_mode": "Listen mode",
+    "chat.listen_hint": "Just listen — the debater, the moderator and every score are spoken.",
     "bubble.retry_audio": "Retry audio",
     "grammar.well_done": "Strong point!",
     "grammar.correction": "Debater's rebuttal",

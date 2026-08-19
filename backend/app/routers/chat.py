@@ -223,6 +223,44 @@ def _history_for_llm(session: SessionData) -> list[dict]:
     return [{"role": m["role"], "content": m["text"]} for m in session.messages]
 
 
+async def consolidate_memory(user_id: str, history: list[dict]) -> None:
+    """Merge a finished session into the user's long-term memory
+    (best-effort, runs after the spoken recap): what was debated, the
+    positions held, recurring fallacies, delivery patterns, score trend,
+    open threads. Newer facts supersede older ones; episodes bounded.
+    Mirrors the episodic-consolidation pattern from the memory research."""
+    try:
+        current = await memory_store.load_memory(user_id)
+        transcript = "\n".join(f"{m['role']}: {m['content']}" for m in history[-40:])
+        system = (
+            "You maintain a learner's long-term memory JSON for a debate "
+            "coach. Merge the finished session into the existing memory. "
+            "JSON schema: "
+            '{"about": {}, "episodes": [], "patterns": [], "threads": []} — '
+            "about: durable facts/preferences the learner stated; episodes: "
+            "one short summary per session (topic, positions held, how the "
+            "debate went); patterns: recurring behaviors (fallacies leaned "
+            "on, delivery habits); threads: open topics worth picking up "
+            "next time {topic, last_position, last_date}. Rules: newer "
+            "facts supersede older ones; keep at most 4 episodes (drop the "
+            "oldest); be specific and concrete, never vague; reply with "
+            "ONLY the JSON."
+        )
+        prompt_user = (
+            f"Existing memory:\n{json.dumps(current, ensure_ascii=False)}\n\n"
+            f"Session transcript (last 40 turns):\n{transcript}"
+        )
+        raw = await llm.chat_reply_fast([
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt_user},
+        ])
+        merged = llm.extract_json(raw or "")
+        if isinstance(merged, dict):
+            await memory_store.save_memory(user_id, merged)
+    except Exception as exc:
+        logger.warning("memory consolidation failed: {}", exc)
+
+
 async def _moderator_line(user_text: str, debater_reply: str, score: int | None, lang: str) -> str:
     """One short neutral moderator interjection after a scored exchange
     (v13.1): a clarifying question, a fairness call, or a score read-out.

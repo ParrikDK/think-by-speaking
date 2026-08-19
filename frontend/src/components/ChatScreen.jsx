@@ -62,10 +62,6 @@ export default function ChatScreen({
     onEnded: endedRef,
   });
 
-  useEffect(() => {
-    endedRef.current = () => setPlayingId(null);
-  }, [setPlayingId]);
-
   // ── Playback wiring (speed-aware) ──
   const handlePlay = useCallback((msgId, audio, rate) => {
     setPlayingId(msgId);
@@ -77,16 +73,35 @@ export default function ChatScreen({
     setPlayingId(null);
   }, [stopAudio]);
 
-  // Auto-play each new tutor reply once it lands, using the user's speed
+  // v13.1: when the debater's reply finishes, speak the moderator's queued
+  // line (the host voice) — the three speakers in order. Declared after
+  // handlePlay (the deps array reads it at render time).
+  const moderatorQueueRef = useRef([]);
+  useEffect(() => {
+    endedRef.current = () => {
+      setPlayingId(null);
+      const next = moderatorQueueRef.current.shift();
+      if (next) handlePlay(next.id, next.audio, playbackSpeed);
+    };
+  }, [setPlayingId, handlePlay, playbackSpeed]);
+
+  // Auto-play each new debater reply once it lands, using the user's speed
+  // (v13.1: the moderator's line plays too — the host's voice — so the
+  // three-speaker experience is actually SPOKEN on the typed path. The
+  // moderator queues behind the debater's audio instead of cutting it).
   const autoPlayedRef = useRef(new Set());
   useEffect(() => {
     for (const m of messages) {
-      if (m.role === 'tutor' && m.audio && !m.streaming && !autoPlayedRef.current.has(m.id)) {
+      if ((m.role === 'tutor' || m.role === 'moderator') && m.audio && !m.streaming && !autoPlayedRef.current.has(m.id)) {
         autoPlayedRef.current.add(m.id);
-        handlePlay(m.id, m.audio, playbackSpeed);
+        if (m.role === 'moderator' && (isPlaying || isBuffering)) {
+          moderatorQueueRef.current.push({ id: m.id, audio: m.audio });
+        } else {
+          handlePlay(m.id, m.audio, playbackSpeed);
+        }
       }
     }
-  }, [messages, handlePlay, playbackSpeed]);
+  }, [messages, handlePlay, playbackSpeed, isPlaying, isBuffering]);
 
   // ── v13.2 voice-first: read feedback cards with the host voice ──
   const speakCard = useCallback((feedback) => {

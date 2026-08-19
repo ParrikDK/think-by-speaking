@@ -460,7 +460,13 @@ async def run_bridge(
                     # v13.1 moderator (default ON): on even debate turns the
                     # host speaks a neutral interjection BEFORE the coach —
                     # a second voice via the proven mid-session switch. The
-                    # moderator response is not a tracked turn.
+                    # moderator response is not a tracked turn. The coach's
+                    # messages are HELD until the moderator's response
+                    # finishes — sending them while it is active makes the
+                    # upstream reject the second response.create with
+                    # "Conversation already has an active response" (found
+                    # by the QA battery, 2026-08-19).
+                    interjected = False
                     if (
                         not state["moderator_pending"]
                         and turn >= 2 and turn % 2 == 0
@@ -478,6 +484,7 @@ async def run_bridge(
                             except Exception:
                                 pass
                             state["moderator_pending"] = True
+                            interjected = True
                             await upstream.send(json.dumps({
                                 "type": "session.update",
                                 "session": {"voice": moderator_voice},
@@ -489,15 +496,22 @@ async def run_bridge(
                                     f"else, in the learner's language: {line}"
                                 ),
                             }))
-                    await upstream.send(json.dumps({
-                        "type": "conversation.item.create",
-                        "item": {
-                            "type": "message",
-                            "role": "user",
-                            "content": [{"type": "input_text", "text": text}],
+                    coach_msgs = [
+                        {
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": text}],
+                            },
                         },
-                    }))
-                    await upstream.send(json.dumps({"type": "response.create"}))
+                        {"type": "response.create"},
+                    ]
+                    if interjected:
+                        hold_state["queue"].extend(coach_msgs)
+                    else:
+                        for m in coach_msgs:
+                            await upstream.send(json.dumps(m))
 
     async def upstream_to_browser():
         """Audio deltas -> binary frames; every other event -> JSON text frame."""
@@ -557,7 +571,7 @@ async def run_bridge(
                             "type": "session.update",
                             "session": {"voice": voice},
                         }))
-                    if hold_state["queue"]:
+                    while hold_state["queue"]:
                         await upstream.send(json.dumps(hold_state["queue"].pop(0)))
                     continue
                 tracker.note_response_done(cancelled=(status == "cancelled"))

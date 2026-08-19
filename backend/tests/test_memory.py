@@ -84,3 +84,45 @@ def test_memory_injected_for_logged_in_users(client, monkeypatch):
     assert "REMEMBERED" in system
     assert "steelmanned well" in system
     assert "NATURAL CONVERSATION" in system
+
+
+def test_summary_consolidates_memory(client, monkeypatch):
+    """Ending a session as a logged-in user consolidates the memory
+    (the 500-regression guard from the QA battery)."""
+    from app.db import memory_store
+
+    async def fake_fast(messages):
+        # summary recap on the first call, memory merge on the second
+        if "maintain a learner" in (messages[0].get("content") or ""):
+            return '{"about": {"goal": "learn by debating"}, "episodes": [], "patterns": [], "threads": []}'
+        return "You finished at 54. Good debate."
+
+    async def fake_chat_json(messages, language="en", native_language="en"):
+        return {"reply": "Greeting!", "translation": "", "feedback": None}
+
+    async def fake_synthesize(text, language="en", voice_id=None, level="beginner", **kw):
+        return "QUJD"
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    monkeypatch.setattr("app.services.llm.chat_json", fake_chat_json)
+    monkeypatch.setattr("app.services.tts.synthesize", fake_synthesize)
+
+    import asyncio
+
+    async def _run():
+        uid = _register(client, "qamemuser")
+        r = client.post(
+            "/api/chat/init",
+            data={"language": "en", "native_language": "en", "level": "intermediate"},
+            headers={"Authorization": f"Bearer {client.post('/api/auth/login', json={'username': 'qamemuser', 'password': 'pw123456'}).json()['token']}"},
+        )
+        sid = r.json()["session_id"]
+        r = client.post("/api/chat", data={"session_id": sid, "language": "en", "text": "claim"}, headers={"Authorization": f"Bearer {client.post('/api/auth/login', json={'username': 'qamemuser', 'password': 'pw123456'}).json()['token']}"})
+        assert r.status_code == 200
+        r = client.post("/api/chat/summary", data={"session_id": sid, "language": "en"}, headers={"Authorization": f"Bearer {client.post('/api/auth/login', json={'username': 'qamemuser', 'password': 'pw123456'}).json()['token']}"})
+        assert r.status_code == 200, r.text  # THE regression: was a 500
+        await asyncio.sleep(0.3)  # let the background consolidation land
+        mem = await memory_store.load_memory(uid)
+        assert mem["about"].get("goal") == "learn by debating"
+
+    asyncio.run(_run())
