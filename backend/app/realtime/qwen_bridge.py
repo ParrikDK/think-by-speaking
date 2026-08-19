@@ -365,15 +365,6 @@ async def run_bridge(
             msg = await browser.receive()
             if msg.get("type") == "websocket.disconnect":
                 break
-            if msg.get("type") == "turn_metrics":
-                # v13.1: delivery metrics for the next turn — proxy-only.
-                # .update() (not rebinding — the nested function would
-                # shadow the outer dict otherwise).
-                pending_metrics.update({
-                    "pitch_var": float(msg.get("pitch_var") or 0),
-                    "secs": float(msg.get("secs") or 0),
-                })
-                continue
             data = msg.get("bytes")
             if data:
                 meter.add_input(len(data))
@@ -395,6 +386,14 @@ async def run_bridge(
                 except json.JSONDecodeError:
                     continue
                 ctype = cmd.get("type")
+                # v13.1: delivery metrics for the next turn — proxy-only
+                # (never forwarded upstream).
+                if ctype == "turn_metrics":
+                    pending_metrics.update({
+                        "pitch_var": float(cmd.get("pitch_var") or 0),
+                        "secs": float(cmd.get("secs") or 0),
+                    })
+                    continue
                 # Guard against cancelling nothing: upstream errors on that.
                 if ctype == "response.cancel" and state["responding"]:
                     logger.debug("REALTIME BROWSER->UP response.cancel (manual interrupt)")
