@@ -577,11 +577,33 @@ async def chat_turn_stream(
         # v13.1 delivery pillars: fillers + audio metrics for spoken turns.
         if audio is not None and turn.feedback is not None:
             turn.feedback.filler_count = delivery.count_fillers(user_text)
-            delivery.attach_metrics(
-                turn.feedback.model_dump(), user_text, audio_secs, pitch_var
+            card = turn.feedback.model_dump()
+            delivery.attach_metrics(card, user_text, audio_secs, pitch_var)
+            turn.feedback.delivery = card.get("delivery") or {}
+        # v13.1 moderator (default ON): neutral interjection on even turns.
+        # The stream path persists this turn AFTER complete — count it in.
+        moderator = None
+        user_turns = sum(1 for m in session.messages if m["role"] == "user") + 1
+        if (
+            _moderator_enabled(session)
+            and user_turns >= 2
+            and user_turns % 2 == 0
+        ):
+            line = await _moderator_line(
+                user_text, turn.text,
+                turn.feedback.score if turn.feedback else None, language,
             )
+            if line:
+                try:
+                    moderator_audio = await tts.synthesize(
+                        line, language, tts.moderator_voice(language)
+                    )
+                    moderator = {"text": line, "audio_base64": moderator_audio}
+                except Exception:
+                    moderator = {"text": line, "audio_base64": ""}
         yield _sse("complete", ChatResponse(
-            session_id=session_id, user_text=user_text, reply=turn, error_type=error_type,
+            session_id=session_id, user_text=user_text, reply=turn,
+            error_type=error_type, moderator=moderator,
         ).model_dump())
 
         # ✅ Persist the turn right after "complete" is delivered — the reply

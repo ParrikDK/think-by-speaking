@@ -718,3 +718,27 @@ def test_moderator_can_be_disabled_in_profile(client, mock_services, monkeypatch
     for _ in range(2):
         r = client.post("/api/chat", data={"session_id": session_id, "language": "en", "text": "x"})
     assert r.json()["moderator"] is None  # moderator off → no interjection
+
+
+def test_moderator_in_stream_complete(client, mock_services, monkeypatch):
+    """The stream endpoint (what the client actually uses) carries the
+    moderator interjection in its complete event on even turns."""
+    async def fake_fast(messages):
+        return "That brings it to 52 for you."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    session_id = _init(client, language="en")["session_id"]
+    for i in range(2):  # turn 1 = framing; turn 2 = scored + moderator
+        r = client.post(
+            "/api/chat/stream",
+            data={"session_id": session_id, "language": "en", "text": f"claim {i}"},
+        )
+        assert r.status_code == 200
+        complete = None
+        for block in r.text.strip().split("\n\n"):
+            lines = block.splitlines()
+            if lines and lines[0] == "event: complete":
+                complete = json.loads(lines[1][6:])
+        assert complete is not None
+    assert complete["moderator"] is not None
+    assert "52" in complete["moderator"]["text"]

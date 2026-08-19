@@ -395,3 +395,14 @@
   .rt-replay { padding: 6px 14px; }
   .rt-debug summary { padding: 10px 0; }
 }
+
+/* v13.1 moderator bubble — the neutral third speaker */
+.rt-msg-moderator {
+  align-self: center;
+  max-width: 420px;
+  background: var(--color-surface-sunken);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 14px;
+  color: var(--color-ink-muted);
+  font-size: 12.5px;
+}

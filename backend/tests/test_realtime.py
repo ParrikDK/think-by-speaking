@@ -693,3 +693,23 @@ def test_moderator_skips_when_disabled(client, fake_upstream, monkeypatch):
         collect_until(ws, lambda e: e.get("type") == "response.done", limit=24)
     voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
     assert "Jennifer" not in voices  # moderator off → no host voice switch
+
+
+def test_spoken_turn_moderator_interjects_via_proxy_event(client, fake_upstream, monkeypatch):
+    """PTT spoken turns on even turns get a proxy.moderator event + the host
+    voice switch; the held response.create is released after the host line."""
+    async def fake_fast(messages):
+        return "The coach owes you a steelman there."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    with client.websocket_connect(ws_url(lang="en", level="intermediate", voice="Ethan")) as ws:
+        fake_upstream.wait_for("session.update")
+        ptt_turn(ws)  # framing turn
+        ptt_turn(ws)  # turn 2 — moderator + coach
+        events = collect_until(ws, lambda e: e.get("type") == "proxy.moderator", limit=24)
+    mod = next(e for e in events if e.get("type") == "proxy.moderator")
+    assert "steelman" in mod["text"]
+    voices = [u["session"].get("voice") for u in fake_upstream.events("session.update")]
+    assert "Jennifer" in voices  # the host spoke
+    creates = fake_upstream.events("response.create")
+    assert len(creates) >= 3  # moderator line + released coach response (2 turns)

@@ -33,9 +33,14 @@ const STARTER_GREETINGS = {
 // ~12 Hz while recording, and bubbles must not re-render with it.
 const RtBubble = memo(function RtBubble({ msg, lang, speaking, langTag, t, onReplay }) {
   const isTutor = msg.role === 'tutor';
+  const isModerator = msg.role === 'moderator';
   return (
-    <div className={`rt-msg ${isTutor ? 'rt-msg-tutor' : 'rt-msg-user'}`} lang={langTag}>
-      <span className="rt-who">{isTutor ? t('bubble.tutor') : t('bubble.you')}</span>
+    <div className={`rt-msg ${isTutor ? 'rt-msg-tutor' : (isModerator ? 'rt-msg-moderator' : 'rt-msg-user')}`} lang={langTag}>
+      <span className="rt-who">
+        {isModerator
+          ? `⚖️ ${t('bubble.moderator', 'moderator')}`
+          : (isTutor ? t('bubble.tutor') : t('bubble.you'))}
+      </span>
       {msg.unclear ? (
         // Wrong-script ASR misfire — the tutor understood the audio fine;
         // only the transcript was garbage.

@@ -408,6 +408,15 @@ export default function useRealtime({ lang, level, scenarioId, native, profile, 
           renderUserTranscript(ev);
           break;
 
+        // v13.1 moderator: a neutral host line — its own ⚖️ bubble.
+        case 'proxy.moderator': {
+          const id = nextMsgId();
+          setMessages((prev) => [...prev, {
+            id, role: 'moderator', text: ev.text || '', replay: false,
+          }]);
+          break;
+        }
+
         // Async debate feedback card for a finished turn (v13): attach to
         // that turn's user bubble.
         case 'proxy.feedback': {

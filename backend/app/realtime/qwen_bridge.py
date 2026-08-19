@@ -261,6 +261,11 @@ async def run_bridge(
     # response is active.
     state = {"responding": False, "first_audio_at": None, "audio_deltas": 0,
              "audio_bytes": 0, "bg": set(), "moderator_pending": False}
+    # v13.1 spoken moderator: the client's response.create for a PTT turn
+    # is held until the ASR transcript arrives, so the host can interject
+    # BEFORE the coach replies. A mutable dict — the pumps assign inside
+    # their own scopes and rebinding would shadow the outer values.
+    hold_state: dict = {"awaiting": False, "create": None}
     # v13.1: client-measured delivery metrics for the NEXT turn (sent as a
     # turn_metrics frame right before input_audio_buffer.commit).
     pending_metrics: dict = {}
@@ -418,6 +423,14 @@ async def run_bridge(
                     # Push-to-talk: the client drives turns manually. Only
                     # meaningful when the session runs with VAD off (ptt mode).
                     if mode == "ptt":
+                        if ctype == "input_audio_buffer.commit":
+                            hold_state["awaiting"] = True  # decide after the ASR
+                        if ctype == "response.create" and hold_state["awaiting"]:
+                            # v13.1: hold the coach response until the
+                            # transcript decides whether the host interjects.
+                            hold_state["create"] = cmd
+                            logger.debug("REALTIME holding response.create (moderator decision)")
+                            continue
                         logger.debug("REALTIME BROWSER->UP {}", ctype)
                         await upstream.send(json.dumps({"type": ctype}))
                 elif ctype == "user_text":
@@ -450,6 +463,14 @@ async def run_bridge(
                     ):
                         line = await _moderator_line_realtime(text)
                         if line:
+                            try:
+                                await browser.send_text(json.dumps({
+                                    "type": "proxy.moderator",
+                                    "text": line,
+                                    "turn": turn,
+                                }))
+                            except Exception:
+                                pass
                             state["moderator_pending"] = True
                             await upstream.send(json.dumps({
                                 "type": "session.update",
@@ -513,13 +534,17 @@ async def run_bridge(
                 )
                 if state["moderator_pending"]:
                     # The moderator's interjection finished — hand the floor
-                    # to the coach (its response was queued right after).
+                    # to the coach: switch the voice back and release the
+                    # held response.create.
                     state["moderator_pending"] = False
                     if voice:
                         await upstream.send(json.dumps({
                             "type": "session.update",
                             "session": {"voice": voice},
                         }))
+                    if hold_state["create"]:
+                        await upstream.send(json.dumps(hold_state["create"]))
+                        hold_state["create"] = None
                     continue
                 tracker.note_response_done(cancelled=(status == "cancelled"))
                 await after_turn_event(tracker.turn)
@@ -554,6 +579,41 @@ async def run_bridge(
                     turn = tracker.note_user_transcript(transcript)
                     event["turn"] = turn
                     await after_turn_event(turn)
+                    # v13.1 spoken moderator: the held response.create is
+                    # released now — through the host first on even turns.
+                    if hold_state["awaiting"]:
+                        hold_state["awaiting"] = False
+                        if (
+                            not state["moderator_pending"]
+                            and turn >= 2 and turn % 2 == 0
+                            and moderator_voice and moderator_voice != voice
+                            and (session.profile or {}).get("moderator", True) is not False
+                        ):
+                            line = await _moderator_line_realtime(transcript)
+                            if line:
+                                try:
+                                    await browser.send_text(json.dumps({
+                                        "type": "proxy.moderator",
+                                        "text": line,
+                                        "turn": turn,
+                                    }))
+                                except Exception:
+                                    pass
+                                state["moderator_pending"] = True
+                                await upstream.send(json.dumps({
+                                    "type": "session.update",
+                                    "session": {"voice": moderator_voice},
+                                }))
+                                await upstream.send(json.dumps({
+                                    "type": "response.create",
+                                    "instructions": (
+                                        "Say exactly this one line and nothing "
+                                        f"else, in the learner's language: {line}"
+                                    ),
+                                }))
+                        if hold_state["create"]:
+                            await upstream.send(json.dumps(hold_state["create"]))
+                            hold_state["create"] = None
             elif etype == "response.audio_transcript.done":
                 event["turn"] = tracker.turn
                 transcript = event.get("transcript") or ""
