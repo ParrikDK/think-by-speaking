@@ -8,7 +8,7 @@ import HistoryScreen from './components/HistoryScreen';
 import ProgressScreen from './components/ProgressScreen';
 import ToastStack from './components/ToastStack';
 import {
-  initChat, streamChat, regenerateTTS, getLanguages, getScenarios, getVoices, getMe, logout as apiLogout,
+  initChat, streamChat, summaryChat, regenerateTTS, getLanguages, getScenarios, getVoices, getMe, logout as apiLogout,
 } from './api';
 import STATIC_LANGUAGES from './i18n/languages';
 import { analyzeAudio } from './utils/audioMetrics';
@@ -82,6 +82,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
+  const recapShownRef = useRef(false); // spoken recap fires once per session
   const msgIdRef = useRef(1);
   const sendingRef = useRef(false);
   const toastSeqRef = useRef(1);
@@ -304,11 +305,28 @@ export default function App() {
     }
   }, [sessionId, targetLang, notify]);
 
-  const endSession = useCallback(() => {
+  const endSession = useCallback(async () => {
+    // v13.1 spoken recap: on the cascade chat screen, End first asks the
+    // coach for a spoken session summary (once), then exits.
+    if (screen === 'chat' && sessionId && !recapShownRef.current) {
+      recapShownRef.current = true;
+      try {
+        const res = await summaryChat(sessionId, targetLang?.code || 'en');
+        const r = res.reply || {};
+        setMessages((prev) => [...prev, {
+          id: nextMsgId(), role: 'tutor', text: r.text || '',
+          translation: r.translation || null, feedback: null,
+          audio: r.audio_base64 || null, streaming: false,
+        }]);
+        return; // the recap plays; 'new conversation' exits
+      } catch (e) {
+        console.error('summary failed:', e);
+      }
+    }
     setMessages([]);
     setSessionId(null);
     setScreen('setup');
-  }, []);
+  }, [screen, sessionId, targetLang]);
 
   const newConversation = useCallback(() => {
     if (!targetLang || !level) return;

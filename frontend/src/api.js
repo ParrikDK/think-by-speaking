@@ -170,6 +170,20 @@ export async function initChat({ language, nativeLanguage, level, scenarioId, vo
   return res.json(); // {session_id, greeting: TurnPayload}
 }
 
+/** Spoken session recap (v13.1): one coach turn over the whole session. */
+export async function summaryChat(sessionId, language) {
+  const form = new FormData();
+  form.append('session_id', sessionId);
+  form.append('language', language);
+  const res = await fetch(`${API_BASE}/chat/summary`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, `Summary failed (${res.status})`));
+  return res.json(); // {reply: TurnPayload}
+}
+
 /**
  * Send one chat turn to the streaming endpoint.
  * Pass EITHER audioBlob (webm/opus) OR text (typed input).

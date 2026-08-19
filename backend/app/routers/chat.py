@@ -414,6 +414,49 @@ async def chat_turn(
 
 # ── POST /api/chat/tts (regenerate audio for a failed turn) ──────────
 
+@router.post("/summary")
+async def chat_summary(
+    session_id: str = Form(...),
+    language: str = Form(...),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """Spoken session recap (v13.1): one LLM pass over the full session
+    producing a warm 3-4 sentence summary — final score, strongest point,
+    fallacies leaned on, one improvement. Returns a TurnPayload WITH audio,
+    spoken by the coach. Mirrors the post-session dashboard pattern of
+    Yoodli / Microsoft Speaker Coach, but spoken."""
+    _validate_language(language)
+    session = await session_store.get_or_load(session_id)
+    if session is None:
+        raise HTTPException(404, "Session not found or expired")
+    history = _history_for_llm(session)
+    if not any(m["role"] == "user" for m in history):
+        raise HTTPException(422, "Nothing to summarize — session has no turns")
+
+    summary_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the debate coach closing a session. The debate is over. "
+                "Speak a warm, concise summary of 3-4 sentences in the same "
+                "language the learner used most recently: their final score, their "
+                "strongest point, any fallacies they leaned on (name them), and ONE "
+                "concrete thing to improve next time. End with an encouraging line. "
+                "Reply with ONLY the spoken text — no labels, no markdown."
+            ),
+        },
+        *history,
+    ]
+    text = await llm.chat_reply_fast(summary_messages)
+    if not text:
+        raise HTTPException(502, "Summary generation failed")
+    turn = await _build_turn(
+        {"reply": llm.strip_markdown(text), "translation": "", "feedback": None},
+        language, session.voice_id, session.level,
+    )
+    return {"reply": turn}
+
+
 @router.post("/tts")
 async def regenerate_tts(
     session_id: str = Form(...),

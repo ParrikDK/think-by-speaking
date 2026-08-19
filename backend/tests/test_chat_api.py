@@ -645,3 +645,34 @@ def test_audio_metrics_become_delivery(client, mock_services, monkeypatch):
     )
     assert r2.status_code == 200, r2.text
     assert r2.json()["reply"]["feedback"]["delivery"]["pitch"] == "varied"
+
+
+def test_spoken_summary_endpoint(client, mock_services, monkeypatch):
+    """v13.1 spoken recap: /chat/summary returns a spoken coach turn over
+    the session history."""
+    async def fake_fast(messages):
+        return "You finished at 54 — your steelman of the junior-staff point was strong, but you leaned on a false dilemma early on. Next time: name your evidence first."
+
+    monkeypatch.setattr("app.services.llm.chat_reply_fast", fake_fast)
+    session_id = _init(client, language="en")["session_id"]
+    r = client.post(
+        "/api/chat",
+        data={"session_id": session_id, "language": "en", "text": "AI will replace teachers."},
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.post(
+        "/api/chat/summary",
+        data={"session_id": session_id, "language": "en"},
+    )
+    assert r.status_code == 200, r.text
+    reply = r.json()["reply"]
+    assert "false dilemma" in reply["text"]
+    assert reply["audio_base64"] == "QUJD"  # spoken (TTS synthesized)
+    assert reply["feedback"] is None
+
+
+def test_summary_empty_session_422(client, mock_services):
+    session_id = _init(client, language="en")["session_id"]
+    r = client.post("/api/chat/summary", data={"session_id": session_id, "language": "en"})
+    assert r.status_code == 422
