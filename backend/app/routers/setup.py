@@ -12,6 +12,7 @@ choice (subject → depth → style), and the wizard starts the debate.
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import get_settings
+from ..routers.languages import SUPPORTED_LANGUAGES
 from ..prompts import load_scenarios
 from ..prompts.tutor import VALID_LEVELS
 from ..services import llm, stt, tts
@@ -107,6 +108,8 @@ async def voice_setup_parse(
     """One spoken answer → a mapped choice for the wizard step."""
     if step not in ("subject", "depth", "style"):
         raise HTTPException(422, "step must be subject|depth|style")
+    if language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(400, f"Unsupported language: {language}")
     audio_bytes = await audio.read()
     if len(audio_bytes) > get_settings().max_audio_bytes:
         raise HTTPException(413, "Audio too large")
