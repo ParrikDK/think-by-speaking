@@ -82,6 +82,18 @@ EN_VOICE_OPTIONS = [
 # from ElevenLabs voice IDs (15-30 alphanumeric chars).
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2}-[A-Za-z]+Neural$")
 
+# ── Debate host voice (v13, user-directed 2026-08-19): the moderator speaks
+# the intro in its own voice, then the coach takes over. en-only for v1 —
+# other languages fall back to the coach voice (no second speaker).
+MODERATOR_VOICES = {
+    "en": "en-GB-SoniaNeural",  # British female host
+}
+
+
+def moderator_voice(language: str) -> str | None:
+    """Edge voice for the debate host, or None (same-voice moderator)."""
+    return MODERATOR_VOICES.get(language)
+
 # ── Default ElevenLabs voices per language (native voices that work) ─
 DEFAULT_VOICES = {
     "fr": "iFBdB4I143qF5ByX6o5A",   # Nelly — French interactive

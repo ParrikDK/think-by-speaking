@@ -582,3 +582,22 @@ def test_malformed_profile_ignored(client, fake_upstream):
     with client.websocket_connect(ws_url(lang="en", profile="not-json")) as ws:
         update = fake_upstream.wait_for("session.update")
     assert "LEARNER PROFILE" not in update["session"]["instructions"]
+
+
+# ── (i) moderator handover (v13, user-directed 2026-08-19) ──────────
+
+def test_moderator_voice_handover_after_greeting(client, fake_upstream):
+    """The host voice (Jennifer) opens the session; after turn 1 the bridge
+    sends a mid-session session.update switching to the coach voice
+    (Ethan) — the moderator speaks the intro, the coach debates."""
+    with client.websocket_connect(ws_url(lang="en", level="intermediate", voice="Ethan")) as ws:
+        fake_upstream.wait_for("session.update")
+        first = fake_upstream.events("session.update")[-1]
+        ptt_turn(ws)
+        deadline = time.time() + 5
+        while len(fake_upstream.events("session.update")) < 2:
+            assert time.time() < deadline, "handover session.update never arrived"
+            time.sleep(0.01)
+        handover = fake_upstream.events("session.update")[-1]
+    assert first["session"]["voice"] == "Jennifer"   # the host opens the debate
+    assert handover["session"]["voice"] == "Ethan"   # the coach takes over

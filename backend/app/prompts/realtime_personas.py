@@ -58,6 +58,16 @@ def voice_for(lang: str) -> str:
     return _VOICES.get(lang, "Kiki")
 
 
+# ── Debate host voice (v13, user-directed 2026-08-19): the moderator opens
+# the debate in its own voice, then hands over to the coach after turn 1
+# (the bridge sends a mid-session session.update voice switch — verified
+# against the upstream 2026-08-19). en-only for v1; both presets verified
+# to produce speech (see voices.py docstring for the verification method).
+REALTIME_MODERATOR_VOICES = {
+    "en": "Jennifer",  # British/American female host; coach defaults to Ethan
+}
+
+
 # ── Per-language voice rules (variety pinning, spoken register, no
 #    romanization aloud) ────────────────────────────────────────────────
 

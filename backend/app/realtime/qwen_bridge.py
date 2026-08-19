@@ -31,6 +31,7 @@ from ..config import get_settings
 from ..db import usage_store
 from ..db.session_store import SessionData, session_store
 from ..prompts.realtime_personas import (
+    REALTIME_MODERATOR_VOICES,
     build_instructions,
     silence_ms_for,
     voice_for,
@@ -204,6 +205,10 @@ async def run_bridge(
     rollover reconnect — no fresh greeting."""
     settings = get_settings()
     tracker = TurnTracker(session)
+    # v13 moderator: the host speaks the greeting, then the coach takes over
+    # (mid-session voice switch after turn 1 — see after_turn_event).
+    moderator_voice = REALTIME_MODERATOR_VOICES.get(lang)
+    start_voice = moderator_voice if (moderator_voice and moderator_voice != voice) else voice
     session_cap = float(settings.realtime_max_audio_seconds)
     meter = _AudioMeter(
         user_id,
@@ -239,7 +244,7 @@ async def run_bridge(
         lang, level, mode, native_language, scenario_prompt, continuation,
         asr_model=settings.realtime_asr_model,
         profile=profile,
-        voice=voice,
+        voice=start_voice,
     )))
     logger.info(
         "REALTIME SESSION start id={} lang={} level={} mode={} native={} user={}",
@@ -317,9 +322,23 @@ async def run_bridge(
         task.add_done_callback(state["bg"].discard)
 
     async def after_turn_event(turn: int):
-        """Persist + feedback-check a turn as soon as it completes."""
+        """Persist + feedback-check a turn as soon as it completes. On the
+        FIRST completed turn (the moderator's greeting), switch the session
+        voice from the host to the coach (v13, user-directed 2026-08-19)."""
         if turn <= 0:
             return
+        if turn == 1 and moderator_voice and voice and moderator_voice != voice:
+            try:
+                await upstream.send(json.dumps({
+                    "type": "session.update",
+                    "session": {"voice": voice},
+                }))
+                logger.info(
+                    "REALTIME moderator handover: host {} -> coach {}",
+                    moderator_voice, voice,
+                )
+            except Exception as exc:
+                logger.warning("voice switch after greeting failed: {}", exc)
         await tracker.persist_turn(turn)
         maybe_fire_feedback(turn)
 

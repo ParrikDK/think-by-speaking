@@ -330,7 +330,10 @@ async def chat_init(
         profile=profile_data,
     )
     payload = await llm.chat_json(messages, language, native_language=session.native_language)
-    turn = await _build_turn(payload, language, session.voice_id, level)
+    # v13 moderator: the greeting is spoken by the debate host (separate
+    # voice when the language has one), the debate itself by the coach.
+    moderator_id = tts.moderator_voice(language) or session.voice_id
+    turn = await _build_turn(payload, language, moderator_id, level)
 
     session.add_message(
         "assistant", turn.text, translation=turn.translation,
